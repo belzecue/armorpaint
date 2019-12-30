@@ -1,41 +1,37 @@
 package arm.render;
 
+import iron.math.Vec4;
+import iron.math.Mat4;
+import iron.math.Quat;
+import iron.object.MeshObject;
+import iron.system.Input;
 import iron.RenderPath;
+import iron.Scene;
+import arm.ui.UITrait;
+import arm.Tool;
 
 class Inc {
 
-	static var path:RenderPath;
+	static var path: RenderPath;
 	public static var superSample = 1.0;
 
 	static var pointIndex = 0;
 	static var spotIndex = 0;
 	static var lastFrame = -1;
+	static var lastX = -1.0;
+	static var lastY = -1.0;
 
-	#if (rp_voxelao && arm_config)
+	#if rp_voxelao
 	static var voxelsCreated = false;
 	#end
 
-	public static function init(_path:RenderPath) {
+	public static function init(_path: RenderPath) {
 		path = _path;
-
-		#if arm_config
 		var config = Config.raw;
 		superSample = config.rp_supersample;
-		#else
-		
-		#if (rp_supersampling == 1.5)
-		superSample = 1.5;
-		#elseif (rp_supersampling == 2)
-		superSample = 2.0;
-		#elseif (rp_supersampling == 4)
-		superSample = 4.0;
-		#end
-		
-		#end
 	}
-	
+
 	public static function applyConfig() {
-		#if arm_config
 		var config = Config.raw;
 		if (superSample != config.rp_supersample) {
 			superSample = config.rp_supersample;
@@ -46,20 +42,16 @@ class Inc {
 			}
 			path.resize();
 		}
-		// Init voxels
 		#if rp_voxelao
 		if (!voxelsCreated) initGI();
 		#end
-		#end // arm_config
 	}
 
 	#if rp_voxelao
 	public static function initGI(tname = "voxels") {
-		#if arm_config
 		var config = Config.raw;
 		if (config.rp_gi != true || voxelsCreated) return;
 		voxelsCreated = true;
-		#end
 
 		var t = new RenderTargetRaw();
 		t.name = tname;
@@ -87,45 +79,115 @@ class Inc {
 		}
 		#end
 	}
+
+	public static inline function getVoxelRes(): Int {
+		return 256;
+	}
+
+	public static inline function getVoxelResZ(): Float {
+		return 1.0;
+	}
 	#end
 
-	public static inline function getVoxelRes():Int {
-		#if (rp_voxelgi_resolution == 512)
-		return 512;
-		#elseif (rp_voxelgi_resolution == 256)
-		return 256;
-		#elseif (rp_voxelgi_resolution == 128)
-		return 128;
-		#elseif (rp_voxelgi_resolution == 64)
-		return 64;
-		#elseif (rp_voxelgi_resolution == 32)
-		return 32;
-		#else
-		return 0;
-		#end
-	}
-
-	public static inline function getVoxelResZ():Float {
-		#if (rp_voxelgi_resolution_z == 1.0)
-		return 1.0;
-		#elseif (rp_voxelgi_resolution_z == 0.5)
-		return 0.5;
-		#elseif (rp_voxelgi_resolution_z == 0.25)
-		return 0.25;
-		#else
-		return 0.0;
-		#end
-	}
-
-	public static inline function getSuperSampling():Float {
+	public static inline function getSuperSampling(): Float {
 		return superSample;
 	}
 
-	public static inline function getHdrFormat():String {
-		#if rp_hdr
-		return "RGBA64";
-		#else
-		return "RGBA32";
+	#if arm_painter
+	public static function drawCompass(currentG: kha.graphics4.Graphics) {
+		if (UITrait.inst.showCompass) {
+			var scene = Scene.active;
+			var cam = Scene.active.camera;
+			var gizmo: MeshObject = cast scene.getChild(".GizmoTranslate");
+
+			var visible = gizmo.visible;
+			var parent = gizmo.parent;
+			var loc = gizmo.transform.loc;
+			var rot = gizmo.transform.rot;
+			var crot = cam.transform.rot;
+			var ratio = iron.App.w() / iron.App.h();
+			var P = cam.P;
+			cam.P = Mat4.ortho(-8 * ratio, 8 * ratio, -8, 8, -2, 2);
+			gizmo.visible = true;
+			gizmo.parent = cam;
+			gizmo.transform.loc = new Vec4(7.2 * ratio, -7.6, -1);
+			gizmo.transform.rot = new Quat(-crot.x, -crot.y, -crot.z, crot.w);
+			gizmo.transform.scale.set(0.5, 0.5, 0.5);
+			gizmo.transform.buildMatrix();
+
+			gizmo.render(currentG, "overlay", []);
+
+			cam.P = P;
+			gizmo.visible = visible;
+			gizmo.parent = parent;
+			gizmo.transform.loc = loc;
+			gizmo.transform.rot = rot;
+			gizmo.transform.buildMatrix();
+		}
+	}
+	#end
+
+	public static function beginSplit() {
+		if (UITrait.inst.splitView) {
+
+			if (UITrait.inst.viewIndexLast == -1 && UITrait.inst.viewIndex == -1) {
+				// Begin split, draw right viewport first
+				UITrait.inst.viewIndex = 1;
+			}
+			else {
+				// Set current viewport
+				UITrait.inst.viewIndex = Input.getMouse().viewX > arm.App.w() / 2 ? 1 : 0;
+			}
+
+			var cam = Scene.active.camera;
+			if (UITrait.inst.viewIndexLast > -1) {
+				// Save current viewport camera
+				arm.plugin.Camera.inst.views[UITrait.inst.viewIndexLast].setFrom(cam.transform.local);
+			}
+
+			if (UITrait.inst.viewIndexLast != UITrait.inst.viewIndex) {
+				// Redraw on current viewport change
+				Context.ddirty = 1;
+			}
+
+			cam.transform.setMatrix(arm.plugin.Camera.inst.views[UITrait.inst.viewIndex]);
+			cam.buildMatrix();
+			cam.buildProjection();
+		}
+	}
+
+	public static function endSplit() {
+		UITrait.inst.viewIndexLast = UITrait.inst.viewIndex;
+		UITrait.inst.viewIndex = -1;
+	}
+
+	public static inline function ssaa4(): Bool {
+		return Config.raw.rp_supersample == 4;
+	}
+
+	public static function isCached(): Bool {
+		#if (!arm_creator)
+		if (Context.ddirty <= 0 && Context.rdirty <= 0 && (Context.pdirty <= 0 || UITrait.inst.worktab.position == SpaceScene)) {
+			var mouse = Input.getMouse();
+			var mx = lastX;
+			var my = lastY;
+			lastX = mouse.viewX;
+			lastY = mouse.viewY;
+			if (mx != lastX || my != lastY || mouse.locked) Context.ddirty = 0;
+			if (Context.ddirty > -2) {
+				path.setTarget("");
+				path.bindTarget("taa", "tex");
+				ssaa4() ?
+					path.drawShader("shader_datas/supersample_resolve/supersample_resolve") :
+					path.drawShader("shader_datas/copy_pass/copy_pass");
+				if (UITrait.inst.brush3d) RenderPathPaint.commandsCursor();
+				if (Context.ddirty <= 0) Context.ddirty--;
+			}
+			endSplit();
+			RenderPathPaint.finishPaint();
+			return true;
+		}
 		#end
+		return false;
 	}
 }

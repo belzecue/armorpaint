@@ -3,14 +3,16 @@ package arm.plugin;
 import iron.system.Input;
 import iron.system.Time;
 import iron.math.Vec4;
+import iron.math.Mat4;
 import arm.ui.UITrait;
 import arm.util.ViewportUtil;
 
 class Camera {
 
-	public static var inst:Camera;
+	public static var inst: Camera;
 	public static var dist = 0.0;
 	static inline var speed = 2.0;
+	public var views: Array<Mat4>;
 	var redraws = 0;
 	var first = true;
 	var dir = new Vec4();
@@ -22,15 +24,17 @@ class Camera {
 		inst = this;
 		var mouse = Input.getMouse();
 		var kb = Input.getKeyboard();
-		
+
 		iron.App.notifyOnUpdate(function() {
 			if (Input.occupied ||
 				!App.uienabled ||
 				App.isDragging  ||
 				UITrait.inst.isScrolling ||
-				mouse.x < 0 ||
-				mouse.x > iron.App.w()) return;
-			
+				mouse.viewX < 0 ||
+				mouse.viewX > iron.App.w()) {
+				return;
+			}
+
 			var camera = iron.Scene.active.camera;
 
 			if (first) {
@@ -40,7 +44,7 @@ class Camera {
 
 			var modif = kb.down("alt") || kb.down("shift") || kb.down("control") || Config.keymap.action_rotate == "middle";
 			var controls = UITrait.inst.cameraControls;
-			if (controls == 0) { // Orbit
+			if (controls == ControlsOrbit) {
 				if (Operator.shortcut(Config.keymap.action_rotate) || (mouse.down("right") && !modif)) {
 					redraws = 2;
 					camera.transform.move(camera.lookWorld(), dist);
@@ -52,14 +56,7 @@ class Camera {
 					camera.transform.move(camera.lookWorld(), -dist);
 				}
 
-				if (Operator.shortcut(Config.keymap.action_pan) || (mouse.down("middle") && !modif)) {
-					redraws = 2;
-					var look = camera.transform.look().normalize().mult(mouse.movementY / 150);
-					var right = camera.transform.right().normalize().mult(-mouse.movementX / 150);
-					camera.transform.loc.add(look);
-					camera.transform.loc.add(right);
-					camera.buildMatrix();
-				}
+				panAction(modif);
 
 				if (Operator.shortcut(Config.keymap.action_zoom)) {
 					redraws = 2;
@@ -84,7 +81,7 @@ class Camera {
 					light.transform.decompose();
 				}
 			}
-			else if (controls == 1) { // Rotate
+			else if (controls == ControlsRotate) {
 				if (Operator.shortcut(Config.keymap.action_rotate) || (mouse.down("right") && !modif)) {
 					redraws = 2;
 					var t = Context.object.transform;
@@ -98,14 +95,7 @@ class Camera {
 					}
 				}
 
-				if (Operator.shortcut(Config.keymap.action_pan) || (mouse.down("middle") && !modif)) {
-					redraws = 2;
-					var look = camera.transform.look().normalize().mult(mouse.movementY / 150);
-					var right = camera.transform.right().normalize().mult(-mouse.movementX / 150);
-					camera.transform.loc.add(look);
-					camera.transform.loc.add(right);
-					camera.buildMatrix();
-				}
+				panAction(modif);
 
 				if (Operator.shortcut(Config.keymap.action_zoom)) {
 					redraws = 2;
@@ -117,7 +107,7 @@ class Camera {
 					camera.transform.move(camera.look(), mouse.wheelDelta * (-0.1));
 				}
 			}
-			else if (controls == 2 && mouse.down("right")) {
+			else if (controls == ControlsFly && mouse.down("right")) {
 				var moveForward = kb.down("w") || kb.down("up") || mouse.wheelDelta < 0;
 				var moveBackward = kb.down("s") || kb.down("down") || mouse.wheelDelta > 0;
 				var strafeLeft = kb.down("a") || kb.down("left");
@@ -128,7 +118,7 @@ class Camera {
 				if (mouse.wheelDelta != 0) {
 					fast *= Math.abs(mouse.wheelDelta) * 4.0;
 				}
-				
+
 				if (moveForward || moveBackward || strafeRight || strafeLeft || strafeUp || strafeDown) {
 					ease += Time.delta * 15;
 					if (ease > 1.0) ease = 1.0;
@@ -147,15 +137,13 @@ class Camera {
 
 				var d = Time.delta * speed * fast * ease;
 				if (d > 0.0) {
-					Context.ddirty = 2;
 					camera.transform.move(dir, d);
-
-					if (UITrait.inst.cameraType == 1) {
+					if (UITrait.inst.cameraType == CameraOrthographic) {
 						ViewportUtil.updateCameraType(UITrait.inst.cameraType);
 					}
 				}
 
-				Context.ddirty = 2;
+				redraws = 2;
 				camera.transform.rotate(Vec4.zAxis(), -mouse.movementX / 200);
 				camera.transform.rotate(camera.right(), -mouse.movementY / 200);
 			}
@@ -164,15 +152,29 @@ class Camera {
 				redraws--;
 				Context.ddirty = 2;
 
-				if (UITrait.inst.cameraType == 1) {
+				if (UITrait.inst.cameraType == CameraOrthographic) {
 					ViewportUtil.updateCameraType(UITrait.inst.cameraType);
 				}
-			} 
+			}
 		});
 	}
 
 	public function reset() {
 		var camera = iron.Scene.active.camera;
 		dist = camera.transform.loc.length();
+		views = [camera.transform.local.clone(), camera.transform.local.clone()];
+	}
+
+	function panAction(modif: Bool) {
+		var camera = iron.Scene.active.camera;
+		var mouse = Input.getMouse();
+		if (Operator.shortcut(Config.keymap.action_pan) || (mouse.down("middle") && !modif)) {
+			redraws = 2;
+			var look = camera.transform.look().normalize().mult(mouse.movementY / 150);
+			var right = camera.transform.right().normalize().mult(-mouse.movementX / 150);
+			camera.transform.loc.add(look);
+			camera.transform.loc.add(right);
+			camera.buildMatrix();
+		}
 	}
 }

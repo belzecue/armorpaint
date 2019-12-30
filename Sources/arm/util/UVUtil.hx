@@ -1,18 +1,17 @@
 package arm.util;
 
 import kha.Image;
-import arm.ui.UITrait;
 
 class UVUtil {
 
-	public static var uvmap:Image = null;
+	public static var uvmap: Image = null;
 	public static var uvmapCached = false;
-	public static var trianglemap:Image = null;
+	public static var trianglemap: Image = null;
 	public static var trianglemapCached = false;
 
 	public static function cacheUVMap() {
 		if (uvmapCached) return;
-		
+
 		var res = Config.getTextureRes();
 		if (uvmap == null) {
 			uvmap = Image.createRenderTarget(res, res);
@@ -58,6 +57,8 @@ class UVUtil {
 		var f = (1 / 32767) * trianglemap.width;
 		var color = 0xff000000;
 		for (i in 0...Std.int(inda.length / 3)) {
+			if (color == 0xffffffff) color = 0xff000000;
+			color++;
 			trianglemap.g2.color = color;
 			var x1 = (texa[inda[i * 3    ] * 2    ]) * f;
 			var x2 = (texa[inda[i * 3 + 1] * 2    ]) * f;
@@ -66,7 +67,6 @@ class UVUtil {
 			var y2 = (texa[inda[i * 3 + 1] * 2 + 1]) * f;
 			var y3 = (texa[inda[i * 3 + 2] * 2 + 1]) * f;
 			trianglemap.g2.fillTriangle(x1, y1, x2, y2, x3, y3);
-			color++;
 		}
 		trianglemap.g2.end();
 	}

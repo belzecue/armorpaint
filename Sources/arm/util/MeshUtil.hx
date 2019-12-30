@@ -8,6 +8,7 @@ import iron.data.Data;
 import iron.object.MeshObject;
 import iron.math.Vec4;
 import arm.ui.UITrait;
+import arm.Tool;
 
 class MeshUtil {
 
@@ -32,7 +33,7 @@ class MeshUtil {
 		for (i in 0...paintObjects.length) {
 			var vas = paintObjects[i].data.raw.vertex_arrays;
 			var ias = paintObjects[i].data.raw.index_arrays;
-			var scale = paintObjects[i].data.scalePos;	
+			var scale = paintObjects[i].data.scalePos;
 
 			for (j in 0...vas[0].values.length) va0[j + voff * 4] = vas[0].values[j];
 			for (j in 0...Std.int(va0.length / 4)) {
@@ -48,7 +49,7 @@ class MeshUtil {
 			ioff += Std.int(ias[0].values.length);
 		}
 
-		var raw:TMeshData = {
+		var raw: TMeshData = {
 			name: Context.paintObject.name,
 			vertex_arrays: [
 				{ values: va0, attrib: "pos" },
@@ -62,19 +63,20 @@ class MeshUtil {
 			scale_tex: 1.0
 		};
 
-		new MeshData(raw, function(md:MeshData) {
+		new MeshData(raw, function(md: MeshData) {
 			Context.mergedObject = new MeshObject(md, Context.paintObject.materials);
 			Context.mergedObject.name = Context.paintObject.name;
 			Context.mergedObject.force_context = "paint";
 			Context.mainObject().addChild(Context.mergedObject);
 		});
 	}
-	
-	public static function swapAxis(a:Int, b:Int) {
-		for (p in Project.paintObjects) {
+
+	public static function swapAxis(a: Int, b: Int) {
+		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+		for (o in objects) {
 			// Remapping vertices, backle up
 			// 0 - x, 1 - y, 2 - z
-			var vas = p.data.raw.vertex_arrays;
+			var vas = o.data.raw.vertex_arrays;
 			var pa  = vas[0].values;
 			var na0 = a == 2 ? vas[0].values : vas[1].values;
 			var na1 = b == 2 ? vas[0].values : vas[1].values;
@@ -92,13 +94,13 @@ class MeshUtil {
 				na1[i * f + d] = -t;
 			}
 
-			var g = p.data.geom;
+			var g = o.data.geom;
 			var posbuf = g.vertexBufferMap.get("pos");
 			if (posbuf != null) { // Remove cache
 				posbuf.delete();
 				g.vertexBufferMap.remove("pos");
 			}
-			
+
 			var vertices = g.vertexBuffer.lockInt16(); // posnortex
 			for (i in 0...Std.int(vertices.length / 8)) {
 				vertices[i * 8    ] = vas[0].values[i * 4    ];
@@ -117,11 +119,16 @@ class MeshUtil {
 			Context.mergedObject = null;
 		}
 		mergeMesh();
+
+		#if kha_direct3d12
+		arm.render.RenderPathRaytrace.ready = false;
+		#end
 	}
 
 	public static function flipNormals() {
-		for (p in Project.paintObjects) {
-			var g = p.data.geom;
+		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+		for (o in objects) {
+			var g = o.data.geom;
 			var vertices = g.vertexBuffer.lockInt16(); // posnortex
 			for (i in 0...Std.int(vertices.length / 8)) {
 				vertices[i * 8 + 3] = -vertices[i * 8 + 3];
@@ -130,6 +137,10 @@ class MeshUtil {
 			}
 			g.vertexBuffer.unlock();
 		}
+
+		#if kha_direct3d12
+		arm.render.RenderPathRaytrace.ready = false;
+		#end
 	}
 
 	public static function calcNormals() {
@@ -138,8 +149,9 @@ class MeshUtil {
 		var vc = new Vec4();
 		var cb = new Vec4();
 		var ab = new Vec4();
-		for (p in Project.paintObjects) {
-			var g = p.data.geom;
+		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+		for (o in objects) {
+			var g = o.data.geom;
 			var inda = g.indices[0];
 			var vertices = g.vertexBuffer.lockInt16(); // posnortex
 			for (i in 0...Std.int(inda.length / 3)) {
@@ -165,5 +177,9 @@ class MeshUtil {
 			}
 			g.vertexBuffer.unlock();
 		}
+
+		#if kha_direct3d12
+		arm.render.RenderPathRaytrace.ready = false;
+		#end
 	}
 }

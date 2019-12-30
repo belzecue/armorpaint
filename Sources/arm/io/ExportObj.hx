@@ -1,12 +1,11 @@
 package arm.io;
 
 import haxe.io.Bytes;
-import arm.ui.UITrait;
 using StringTools;
 
 class ExportObj {
 
-	public static function run(path:String) {
+	public static function run(path: String) {
 		var s = "";
 		var off = 0;
 		for (p in Project.paintObjects) {
@@ -44,8 +43,6 @@ class ExportObj {
 			off += inda.length;
 		}
 		if (!path.endsWith(".obj")) path += ".obj";
-		#if kha_krom
 		Krom.fileSaveBytes(path, Bytes.ofString(s).getData());
-		#end
 	}
 }

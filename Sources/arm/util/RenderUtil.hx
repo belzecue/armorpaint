@@ -1,6 +1,7 @@
 package arm.util;
 
 import kha.Image;
+import kha.Font;
 import kha.graphics4.TextureFormat;
 import iron.Scene;
 import iron.RenderPath;
@@ -8,8 +9,8 @@ import iron.object.MeshObject;
 import iron.math.Mat4;
 import arm.ui.UITrait;
 import arm.render.RenderPathPreview;
-import arm.render.RenderPathDeferred;
-import arm.nodes.MaterialParser;
+import arm.node.MaterialParser;
+import arm.io.ImportFont;
 import arm.Tool;
 
 class RenderUtil {
@@ -20,7 +21,7 @@ class RenderUtil {
 	public static function makeMaterialPreview() {
 		UITrait.inst.materialPreview = true;
 
-		var sphere:MeshObject = cast Scene.active.getChild(".Sphere");
+		var sphere: MeshObject = cast Scene.active.getChild(".Sphere");
 		sphere.visible = true;
 		var meshes = Scene.active.meshes;
 		Scene.active.meshes = [sphere];
@@ -41,13 +42,19 @@ class RenderUtil {
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(0);
+		ViewportUtil.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		var savedLight = light.data.raw.strength;
-		light.data.raw.strength = 1500;
 		var probe = Scene.active.world.probe;
 		var savedProbe = probe.raw.strength;
+		#if arm_world
+		light.data.raw.strength = 1;
+		probe.raw.strength = 1;
+		#else
+		light.data.raw.strength = 1500;
 		probe.raw.strength = 4;
+		#end
+
 		Scene.active.world.envmap = UITrait.inst.previewEnvmap;
 		// No resize
 		@:privateAccess RenderPath.active.lastW = matPreviewSize;
@@ -56,9 +63,10 @@ class RenderUtil {
 		Scene.active.camera.buildMatrix();
 
 		MaterialParser.parseMeshPreviewMaterial();
+		var _commands = RenderPath.active.commands;
 		RenderPath.active.commands = RenderPathPreview.commandsPreview;
 		RenderPath.active.renderFrame(RenderPath.active.frameG);
-		RenderPath.active.commands = RenderPathDeferred.commands;
+		RenderPath.active.commands = _commands;
 
 		UITrait.inst.materialPreview = false;
 		@:privateAccess RenderPath.active.lastW = iron.App.w();
@@ -87,7 +95,7 @@ class RenderUtil {
 		}
 		UITrait.inst.decalPreview = true;
 
-		var plane:MeshObject = cast Scene.active.getChild(".Plane");
+		var plane: MeshObject = cast Scene.active.getChild(".Plane");
 		plane.transform.scale.set(1, 1, 1);
 		plane.transform.rot.fromEuler(-Math.PI / 2, 0, 0);
 		plane.transform.buildMatrix();
@@ -96,14 +104,14 @@ class RenderUtil {
 		Scene.active.meshes = [plane];
 		var painto = Context.paintObject;
 		Context.paintObject = plane;
-		
+
 		UITrait.inst.savedCamera.setFrom(Scene.active.camera.transform.local);
 		var m = Mat4.identity();
 		m.translate(0, 0, 1);
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(0);
+		ViewportUtil.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		light.visible = false;
 		Scene.active.world.envmap = UITrait.inst.previewEnvmap;
@@ -115,9 +123,10 @@ class RenderUtil {
 		Scene.active.camera.buildMatrix();
 
 		MaterialParser.parseMeshPreviewMaterial();
+		var _commands = RenderPath.active.commands;
 		RenderPath.active.commands = RenderPathPreview.commandsDecal;
 		RenderPath.active.renderFrame(RenderPath.active.frameG);
-		RenderPath.active.commands = RenderPathDeferred.commands;
+		RenderPath.active.commands = _commands;
 
 		UITrait.inst.decalPreview = false;
 		@:privateAccess RenderPath.active.lastW = iron.App.w();
@@ -136,14 +145,14 @@ class RenderUtil {
 		var light = Scene.active.lights[0];
 		light.visible = true;
 		Scene.active.world.envmap = UITrait.inst.showEnvmap ? UITrait.inst.savedEnvmap : UITrait.inst.emptyEnvmap;
-		
+
 		MaterialParser.parseMeshMaterial();
 		Context.ddirty = 0;
 	}
 
 	public static function makeTextPreview() {
 		var text = UITrait.inst.textToolText;
-		var font = Tool.getTextToolFont();
+		var font = getTextToolFont();
 		var fontSize = 200;
 		var textW = Std.int(font.width(fontSize, text));
 		var textH = Std.int(font.height(fontSize));
@@ -163,6 +172,12 @@ class RenderUtil {
 		g2.color = 0xffffffff;
 		g2.drawString(text, texW / 2 - textW / 2, texW / 2 - textH / 2);
 		g2.end();
+	}
+
+	static function getTextToolFont(): Font {
+		var fontName = ImportFont.fontList[UITrait.inst.textToolHandle.position];
+		if (fontName == "default.ttf") return UITrait.inst.ui.ops.font;
+		return ImportFont.fontMap.get(fontName);
 	}
 
 	public static function makeDecalMaskPreview() {

@@ -3,8 +3,10 @@ package arm.ui;
 import zui.Zui;
 import zui.Id;
 import iron.system.Time;
+import iron.system.Input;
 import arm.data.LayerSlot;
-import arm.nodes.MaterialParser;
+import arm.node.MaterialParser;
+import arm.util.UVUtil;
 
 class TabLayers {
 
@@ -12,14 +14,24 @@ class TabLayers {
 	public static function draw() {
 		var ui = UITrait.inst.ui;
 		if (ui.tab(UITrait.inst.htab, "Layers")) {
-			ui.row([1/4,1/4,1/2]);
+			ui.row([1 / 4, 1 / 4, 1 / 2]);
 			if (ui.button("New")) {
+
+				// UIMenu.draw(function(ui:Zui) {
+				// 	ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 5, ui.t.SEPARATOR_COL);
+				// 	ui.text("New", Right, ui.t.HIGHLIGHT_COL);
+				// 	if (ui.button("Paint Layer", Left)) {}
+				// 	if (ui.button("Fill Layer", Left)) {}
+				// 	if (ui.button("Black Mask", Left)) {}
+				// 	if (ui.button("White Mask", Left)) {}
+				// });
+
 				Layers.newLayer();
 				History.newLayer();
 			}
 			if (ui.button("2D View")) UITrait.inst.show2DView();
-			else if (ui.isHovered) ui.tooltip("Show 2D View (SHIFT+TAB)");
-			
+			else if (ui.isHovered) ui.tooltip("Show 2D View (" + Config.keymap.toggle_node_editor + ")");
+
 			var ar = ["All"];
 			for (p in Project.paintObjects) ar.push(p.name);
 			var filterHandle = Id.handle();
@@ -32,44 +44,54 @@ class TabLayers {
 				Context.ddirty = 2;
 			}
 
-			function drawList(l:LayerSlot, i:Int) {
+			function drawList(l: LayerSlot, i: Int) {
 
 				if (UITrait.inst.layerFilter > 0 &&
 					l.objectMask > 0 &&
-					l.objectMask != UITrait.inst.layerFilter) return;
+					l.objectMask != UITrait.inst.layerFilter) {
+					return;
+				}
 
 				var h = Id.handle().nest(l.id, {selected: l.visible});
 				var layerPanel = h.nest(0, {selected: false});
 				var off = ui.t.ELEMENT_OFFSET;
 				var step = ui.t.ELEMENT_H;
-				var checkw = (ui._windowW / 100 * 8) / ui.SCALE;
+				var checkw = (ui._windowW / 100 * 8) / ui.SCALE();
 
 				if (layerPanel.selected) {
-					ui.fill(checkw, step * 2, (ui._windowW / ui.SCALE - 2) - checkw, step + off, ui.t.SEPARATOR_COL);
+					var mult = l.material_mask != null ? 2 : 1;
+					var ph = (step + off) * mult;
+					ui.fill(checkw, step * 2, (ui._windowW / ui.SCALE() - 2) - checkw, ph, ui.t.SEPARATOR_COL);
 				}
 
 				if (Context.layer == l) {
 					if (Context.layerIsMask) {
-						ui.rect(ui._windowW / 100 * 24 - 2, 0, ui._windowW / 100 * 16, step * 2, ui.t.HIGHLIGHT_COL, 2);
+						ui.rect((ui._windowW / 100 * 24) / ui.SCALE() + Std.int(1 * ui.SCALE()), 0, step * 2, step * 2, ui.t.HIGHLIGHT_COL, 2);
 					}
 					else {
-						ui.fill(checkw, 0, (ui._windowW / ui.SCALE - 2) - checkw, step * 2, ui.t.HIGHLIGHT_COL);
+						ui.fill(checkw, 0, (ui._windowW / ui.SCALE() - 2) - checkw, step * 2, ui.t.HIGHLIGHT_COL);
 					}
 				}
 
 				if (l.texpaint_mask != null) {
-					ui.row([8/100, 16/100, 16/100, 20/100, 30/100, 10/100]);
+					ui.row([8 / 100, 16 / 100, 16 / 100, 20 / 100, 30 / 100, 10 / 100]);
 				}
 				else {
-					ui.row([8/100, 16/100, 36/100, 30/100, 10/100]);
+					ui.row([8 / 100, 16 / 100, 36 / 100, 30 / 100, 10 / 100]);
 				}
-				
-				var center = (step / 2) * ui.SCALE;
+
+				var center = (step / 2) * ui.SCALE();
 				ui._y += center;
-				l.visible = ui.check(h, "");
-				if (h.changed) {
+				var icons = Res.get("icons.k");
+				var r = Res.tile18(icons, l.visible ? 0 : 1, 0);
+				ui._x += 2;
+				ui._y += 3;
+				if (ui.image(icons, ui.t.ACCENT_SELECT_COL, null, r.x, r.y, r.w, r.h) == Released) {
+					l.visible = !l.visible;
 					MaterialParser.parseMeshMaterial();
 				}
+				ui._x -= 2;
+				ui._y -= 3;
 				ui._y -= center;
 
 				var contextMenu = false;
@@ -78,8 +100,12 @@ class TabLayers {
 				ui.imageInvertY = l.material_mask != null;
 				#end
 
+				var uix = ui._x;
+				var uiy = ui._y;
+				ui._x += 2;
 				ui._y += 3;
-				var state = ui.image(l.material_mask == null ? l.texpaint_preview : l.material_mask.imageIcon);
+				var state = ui.image(l.material_mask == null ? l.texpaint_preview : l.material_mask.imageIcon, 0xffffffff, (ui.ELEMENT_H() - 3) * 2);
+				ui._x -= 2;
 				ui._y -= 3;
 
 				#if (kha_opengl || kha_webgl)
@@ -92,25 +118,31 @@ class TabLayers {
 				if (ui.isHovered && ui.inputReleasedR) {
 					contextMenu = true;
 				}
-				if (ui.isReleased) {
-					Context.setLayer(l);
-				}
 				if (state == State.Started) {
+					Context.setLayer(l);
 					if (Time.time() - UITrait.inst.selectTime < 0.25) UITrait.inst.show2DView();
 					UITrait.inst.selectTime = Time.time();
+					var mouse = Input.getMouse();
+					App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
+					App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
+					App.dragLayer = Context.layer;
 				}
 
 				if (l.texpaint_mask != null) {
+					var uix = ui._x;
+					var uiy = ui._y;
+					ui._x += Std.int(4 * ui.SCALE());
 					ui._y += 3;
-					var state = ui.image(l.texpaint_mask_preview);
+					var state = ui.image(l.texpaint_mask_preview, 0xffffffff, (ui.ELEMENT_H() - 3) * 2);
+					ui._x -= Std.int(4 * ui.SCALE());
 					ui._y -= 3;
 					if (ui.isHovered) {
 						ui.tooltipImage(l.texpaint_mask_preview);
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
-						UIMenu.draw(function(ui:Zui) {
-							ui.fill(0, 0, ui._w, ui.t.ELEMENT_H * 3, ui.t.SEPARATOR_COL);
-							ui.text(l.name + " Mask", Right);
+						UIMenu.draw(function(ui: Zui) {
+							ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 3, ui.t.SEPARATOR_COL);
+							ui.text(l.name + " Mask", Right, ui.t.HIGHLIGHT_COL);
 							if (ui.button("Delete", Left)) {
 								Context.setLayer(l);
 								History.deleteMask();
@@ -118,12 +150,12 @@ class TabLayers {
 								Context.setLayer(l);
 							}
 							if (ui.button("Apply", Left)) {
-								function makeApply(g:kha.graphics4.Graphics) {
+								function makeApply(g: kha.graphics4.Graphics) {
 									g.end();
 									Context.setLayer(l);
 									History.applyMask();
 									l.applyMask();
-									Context.setLayer(l); // Parse mesh material
+									MaterialParser.parseMeshMaterial();
 									g.begin();
 									iron.App.removeRender(makeApply);
 								}
@@ -131,12 +163,14 @@ class TabLayers {
 							}
 						});
 					}
-					if (ui.isReleased) {
-						Context.setLayer(l, true);
-					}
 					if (state == State.Started) {
+						Context.setLayer(l, true);
 						if (Time.time() - UITrait.inst.selectTime < 0.25) UITrait.inst.show2DView();
 						UITrait.inst.selectTime = Time.time();
+						var mouse = Input.getMouse();
+						App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
+						App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
+						App.dragLayer = Context.layer;
 					}
 				}
 
@@ -144,10 +178,8 @@ class TabLayers {
 				var state = ui.text(l.name);
 				ui._y -= center;
 
-				if (ui.isReleased) {
-					Context.setLayer(l);
-				}
 				if (state == State.Started) {
+					Context.setLayer(l);
 					if (Time.time() - UITrait.inst.selectTime < 0.25) UITrait.inst.show2DView();
 					UITrait.inst.selectTime = Time.time();
 				}
@@ -157,31 +189,33 @@ class TabLayers {
 				}
 
 				if (contextMenu) {
-					UIMenu.draw(function(ui:Zui) {
+					UIMenu.draw(function(ui: Zui) {
+						var add = l.material_mask != null ? 1 : 0;
 						if (l == Project.layers[0]) {
-							ui.fill(0, 0, ui._w, ui.t.ELEMENT_H * 10, ui.t.SEPARATOR_COL);
-							ui.text(l.name, Right);
+							ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * (11 + add), ui.t.SEPARATOR_COL);
 						}
 						else {
-							ui.fill(0, 0, ui._w, ui.t.ELEMENT_H * 17, ui.t.SEPARATOR_COL);
-							ui.text(l.name, Right);
+							ui.fill(0, 0, ui._w, ui.t.ELEMENT_H * (18 + add), ui.t.SEPARATOR_COL);
 						}
+						ui.text(l.name, Right, ui.t.HIGHLIGHT_COL);
+
+						if (ui.button("Export", Left)) BoxExport.showTextures();
 
 						if (l.material_mask == null && ui.button("To Fill Layer", Left)) {
-							function makeFill(g:kha.graphics4.Graphics) {
+							function makeFill(g: kha.graphics4.Graphics) {
 								g.end();
 								History.toFillLayer();
-								Layers.toFillLayer(l);
+								l.toFillLayer();
 								g.begin();
 								iron.App.removeRender(makeFill);
 							}
 							iron.App.notifyOnRender(makeFill);
 						}
 						if (l.material_mask != null && ui.button("To Paint Layer", Left)) {
-							function makePaint(g:kha.graphics4.Graphics) {
+							function makePaint(g: kha.graphics4.Graphics) {
 								g.end();
 								History.toPaintLayer();
-								Layers.toPaintLayer(l);
+								l.toPaintLayer();
 								g.begin();
 								iron.App.removeRender(makePaint);
 							}
@@ -194,7 +228,7 @@ class TabLayers {
 							if (ui.button("Delete", Left)) {
 								Context.layer = l;
 								History.deleteLayer();
-								Layers.deleteSelectedLayer();
+								l.delete();
 							}
 							if (ui.button("Move Up", Left)) {
 								if (i < Project.layers.length - 1) {
@@ -224,7 +258,7 @@ class TabLayers {
 							if (ui.button("Duplicate", Left)) {
 								Context.setLayer(l);
 								History.duplicateLayer();
-								function makeDupli(g:kha.graphics4.Graphics) {
+								function makeDupli(g: kha.graphics4.Graphics) {
 									g.end();
 									l = l.duplicate();
 									Context.setLayer(l);
@@ -244,6 +278,11 @@ class TabLayers {
 								Context.setLayer(l, true);
 								Context.layerPreviewDirty = true;
 								History.newMask();
+							}
+						}
+						if (l.material_mask != null) {
+							if (ui.button("Select Material", Left)) {
+								Context.setMaterial(l.material_mask);
 							}
 						}
 
@@ -272,7 +311,7 @@ class TabLayers {
 							emisHandle.changed ||
 							subsHandle.changed) {
 							MaterialParser.parseMeshMaterial();
-							UIMenu.propChanged = true;
+							UIMenu.keepOpen = true;
 						}
 					});
 				}
@@ -281,11 +320,19 @@ class TabLayers {
 					@:privateAccess ui.endElement();
 				}
 				else {
-					var blend = ui.combo(Id.handle(), ["Add"], "Blending");
+					var blendingHandle = Id.handle().nest(l.id);
+					blendingHandle.position = l.blending;
+					ui.combo(blendingHandle, ["Mix", "Darken", "Multiply", "Burn", "Lighten", "Screen", "Dodge", "Add", "Overlay", "Soft Light", "Linear Light", "Difference", "Subtract", "Divide", "Hue", "Saturation", "Color", "Value"], "Blending");
+					if (blendingHandle.changed) {
+						Context.setLayer(l);
+						History.layerBlending();
+						l.blending = blendingHandle.position;
+						MaterialParser.parseMeshMaterial();
+					}
 				}
 
 				ui._y += center;
-				var showPanel = ui.panel(layerPanel, "", 0, true);
+				var showPanel = ui.panel(layerPanel, "", true);
 				ui._y -= center;
 
 				if (i == 0) {
@@ -294,7 +341,7 @@ class TabLayers {
 				}
 				else {
 					ui._y -= ui.t.ELEMENT_OFFSET;
-					ui.row([8/100, 16/100, 36/100, 30/100, 10/100]);
+					ui.row([8 / 100, 16 / 100, 36 / 100, 30 / 100, 10 / 100]);
 					@:privateAccess ui.endElement();
 					@:privateAccess ui.endElement();
 					@:privateAccess ui.endElement();
@@ -306,19 +353,83 @@ class TabLayers {
 					l.objectMask = ui.combo(h, ar, "Object");
 					if (h.changed) {
 						Context.setLayer(l);
-						Layers.updateFillLayers(4);
+						if (l.material_mask != null) { // Fill layer
+							iron.App.notifyOnRender(l.clear);
+							iron.App.notifyOnRender(function(_){
+								Layers.updateFillLayers(4);
+							});
+						}
+						else {
+							MaterialParser.parseMeshMaterial();
+							Layers.setObjectMask();
+						}
 					}
 					@:privateAccess ui.endElement();
 				}
 				ui._y -= ui.t.ELEMENT_OFFSET;
 
 				if (showPanel) {
-					ui.row([8/100,92/100]);
+					ui.row([8 / 100, 92 / 100 / 3, 92 / 100 / 3, 92 / 100 / 3]);
 					@:privateAccess ui.endElement();
-					var opacHandle = Id.handle().nest(l.id, {value: l.maskOpacity});
-					l.maskOpacity = ui.slider(opacHandle, "Opacity", 0.0, 1.0, true);
+					ui._x += 1;
+					ui._y += 2;
+
+					var opacHandle = Id.handle().nest(l.id);
+
+					opacHandle.value = l.maskOpacity;
+					ui.slider(opacHandle, "Opacity", 0.0, 1.0, true);
 					if (opacHandle.changed) {
+						Context.setLayer(l);
+						if (ui.inputStarted) History.layerOpacity();
+						l.maskOpacity = opacHandle.value;
 						MaterialParser.parseMeshMaterial();
+					}
+
+					ui.combo(App.resHandle, ["128", "256", "512", "1K", "2K", "4K", "8K", "16K"], "Res", true);
+					if (App.resHandle.changed) {
+						iron.App.notifyOnRender(Layers.resizeLayers);
+						UVUtil.uvmap = null;
+						UVUtil.uvmapCached = false;
+						UVUtil.trianglemap = null;
+						UVUtil.trianglemapCached = false;
+						#if kha_direct3d12
+						arm.render.RenderPathRaytrace.ready = false;
+						#end
+					}
+					ui.combo(App.bitsHandle, ["8bit", "16bit", "32bit"], "Color", true);
+					if (App.bitsHandle.changed) {
+						iron.App.notifyOnRender(Layers.setLayerBits);
+					}
+
+					if (l.material_mask != null) {
+						ui.row([8 / 100, 92 / 100 / 3, 92 / 100 / 3, 92 / 100 / 3]);
+						@:privateAccess ui.endElement();
+
+						var uvScaleHandle = Id.handle().nest(l.id, {value: l.uvScale});
+						l.uvScale = ui.slider(uvScaleHandle, "UV Scale", 0.0, 5.0, true);
+						if (uvScaleHandle.changed) {
+							Context.setMaterial(l.material_mask);
+							Context.setLayer(l);
+							Layers.updateFillLayers();
+						}
+
+						var uvRotHandle = Id.handle().nest(l.id, {value: l.uvRot});
+						l.uvRot = ui.slider(uvRotHandle, "UV Rotate", 0.0, 360, true, 1);
+						if (uvRotHandle.changed) {
+							Context.setMaterial(l.material_mask);
+							Context.setLayer(l);
+							MaterialParser.parsePaintMaterial();
+							Layers.updateFillLayers();
+						}
+
+						var uvTypeHandle = Id.handle().nest(l.id, {position: l.uvType});
+						l.uvType = ui.combo(uvTypeHandle, ["UV Map", "Triplanar"], "TexCoord");
+						if (uvTypeHandle.changed) {
+							Context.setMaterial(l.material_mask);
+							Context.setLayer(l);
+							MaterialParser.parsePaintMaterial();
+							Layers.updateFillLayers();
+						}
 					}
 				}
 			}

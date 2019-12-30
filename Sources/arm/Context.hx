@@ -1,31 +1,29 @@
 package arm;
 
-import zui.Canvas;
 import iron.object.Object;
 import iron.object.MeshObject;
-import iron.data.Data;
 import arm.data.MaterialSlot;
 import arm.data.LayerSlot;
 import arm.data.BrushSlot;
 import arm.util.UVUtil;
 import arm.util.RenderUtil;
+import arm.util.ParticleUtil;
 import arm.ui.UITrait;
-import arm.ui.UINodes;
-import arm.ui.UIFiles;
-import arm.io.Importer;
-import arm.nodes.MaterialParser;
+import arm.node.MaterialParser;
 import arm.Tool;
+import arm.Project;
 
 class Context {
-	public static var material:MaterialSlot;
-	public static var materialScene:MaterialSlot;
-	public static var layer:LayerSlot;
+
+	public static var material: MaterialSlot;
+	public static var materialScene: MaterialSlot;
+	public static var layer: LayerSlot;
 	public static var layerIsMask = false; // Mask selected for active layer
-	public static var brush:BrushSlot;
-	public static var texture:TAsset = null;
-	public static var object:Object;
-	public static var paintObject:MeshObject;
-	public static var mergedObject:MeshObject = null; // For object mask
+	public static var brush: BrushSlot;
+	public static var texture: TAsset = null;
+	public static var object: Object;
+	public static var paintObject: MeshObject;
+	public static var mergedObject: MeshObject = null; // For object mask
 	public static var tool = 0;
 
 	public static var ddirty = 0; // depth
@@ -35,45 +33,47 @@ class Context {
 	public static var layerPreviewDirty = true;
 	public static var layersPreviewDirty = false;
 
-	public static function selectMaterialScene(i:Int) {
+	public static function selectMaterialScene(i: Int) {
 		if (Project.materialsScene.length <= i || object == paintObject) return;
 		materialScene = Project.materialsScene[i];
 		if (Std.is(object, MeshObject)) {
-			cast(object, MeshObject).materials[0] = materialScene.data;
+			var mats = cast(object, MeshObject).materials;
+			for (i in 0...mats.length) mats[i] = materialScene.data;
 		}
-		UINodes.inst.updateCanvasMap();
 		MaterialParser.parsePaintMaterial();
 		UITrait.inst.hwnd.redraws = 2;
 	}
 
-	public static function selectMaterial(i:Int) {
+	public static function selectMaterial(i: Int) {
 		if (Project.materials.length <= i) return;
 		setMaterial(Project.materials[i]);
 	}
 
-	public static function setMaterial(m:MaterialSlot) {
+	public static function setMaterial(m: MaterialSlot) {
+		if (Project.materials.indexOf(m) == -1) return;
 		material = m;
-		UINodes.inst.updateCanvasMap();
 		MaterialParser.parsePaintMaterial();
 		UITrait.inst.hwnd1.redraws = 2;
 		UITrait.inst.headerHandle.redraws = 2;
 
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
-		if (current != null) current.end();
 		var decal = tool == ToolDecal || tool == ToolText;
-		if (decal) RenderUtil.makeDecalPreview();
-		if (current != null) current.begin(false);
+		if (decal) {
+			var current = @:privateAccess kha.graphics4.Graphics2.current;
+			if (current != null) current.end();
+			RenderUtil.makeDecalPreview();
+			if (current != null) current.begin(false);
+		}
 	}
 
-	public static function selectBrush(i:Int) {
+	public static function selectBrush(i: Int) {
 		if (Project.brushes.length <= i) return;
 		brush = Project.brushes[i];
-		UINodes.inst.updateCanvasBrushMap();
 		MaterialParser.parseBrush();
 		UITrait.inst.hwnd1.redraws = 2;
 	}
 
-	public static function setLayer(l:LayerSlot, isMask = false) {
+	public static function setLayer(l: LayerSlot, isMask = false) {
+		if (l == layer && layerIsMask == isMask) return;
 		layer = l;
 		layerIsMask = isMask;
 		UITrait.inst.headerHandle.redraws = 2;
@@ -90,7 +90,7 @@ class Context {
 		UITrait.inst.hwnd.redraws = 2;
 	}
 
-	public static function selectTool(i:Int) {
+	public static function selectTool(i: Int) {
 		tool = i;
 		MaterialParser.parsePaintMaterial();
 		MaterialParser.parseMeshMaterial();
@@ -111,17 +111,17 @@ class Context {
 
 			RenderUtil.makeDecalPreview();
 			ddirty = 2;
-			
+
 			if (current != null) current.begin(false);
 		}
 
 		if (tool == ToolParticle) {
-			Tool.initParticle();
+			ParticleUtil.initParticle();
 			MaterialParser.parseParticleMaterial();
 		}
 	}
 
-	public static function selectObject(o:Object) {
+	public static function selectObject(o: Object) {
 		object = o;
 
 		if (UITrait.inst.worktab.position == SpaceScene) {
@@ -138,14 +138,14 @@ class Context {
 		}
 	}
 
-	public static function selectPaintObject(o:MeshObject) {
+	public static function selectPaintObject(o: MeshObject) {
 		UITrait.inst.headerHandle.redraws = 2;
 		for (p in Project.paintObjects) p.skip_context = "paint";
 		paintObject = o;
 
 		var mask = layer.objectMask;
 		if (UITrait.inst.layerFilter > 0) mask = UITrait.inst.layerFilter;
-		
+
 		if (mergedObject == null || mask > 0) {
 			paintObject.skip_context = "";
 		}
@@ -153,24 +153,8 @@ class Context {
 		UVUtil.trianglemapCached = false;
 	}
 
-	public static function mainObject():MeshObject {
+	public static function mainObject(): MeshObject {
 		for (po in Project.paintObjects) if (po.children.length > 0) return po;
 		return Project.paintObjects[0];
-	}
-
-	public static function removeMaterialCache() {
-		Data.cachedMaterials.remove("SceneMaterial2");
-		Data.cachedShaders.remove("Material2_data");
-		Data.cachedSceneRaws.remove("Material2_data");
-		// Data.cachedBlobs.remove("Material2_data.arm");
-	}
-
-	public static function importMesh() {
-		UIFiles.show = true;
-		UIFiles.isSave = false;
-		UIFiles.filters = "obj,fbx,blend,arm";
-		UIFiles.filesDone = function(path:String) {
-			Importer.importFile(path);
-		}
 	}
 }
