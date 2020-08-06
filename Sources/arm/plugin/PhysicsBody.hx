@@ -14,7 +14,20 @@ class PhysicsBody extends iron.Trait {
 	@:keep
 	public var props = ["mass"];
 
-	public var mass = 1.0;
+	public var mass(default, set) = 0.0;
+
+	@:keep
+	function set_mass(f: Float): Float {
+		if (ready) {
+			remove();
+			var t = new PhysicsBody();
+			t.mass = f;
+			object.addTrait(t);
+		}
+		else mass = f;
+		return f;
+	}
+
 	public var friction = 0.5;
 	public var restitution = 0.0;
 	public var collisionMargin = 0.0;
@@ -355,7 +368,7 @@ class PhysicsBody extends iron.Trait {
 		convexHullCache.set(data, shape);
 		usersCache.set(data, 1);
 
-		var positions = data.geom.positions;
+		var positions = data.geom.positions.values;
 
 		var sx: kha.FastFloat = scale.x * (1.0 - margin) * (1 / 32767);
 		var sy: kha.FastFloat = scale.y * (1.0 - margin) * (1 / 32767);
@@ -389,7 +402,7 @@ class PhysicsBody extends iron.Trait {
 		triangleMeshCache.set(data, triangleMesh);
 		usersCache.set(data, 1);
 
-		var positions = data.geom.positions;
+		var positions = data.geom.positions.values;
 		var indices = data.geom.indices;
 
 		var sx: kha.FastFloat = scale.x * (1 / 32767);

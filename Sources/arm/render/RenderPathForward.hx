@@ -3,7 +3,7 @@ package arm.render;
 import kha.System;
 import iron.RenderPath;
 import iron.Scene;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 
 class RenderPathForward {
 
@@ -24,7 +24,7 @@ class RenderPathForward {
 		if (Inc.isCached()) return;
 
 		// Match projection matrix jitter
-		var skipTaa = UITrait.inst.splitView;
+		var skipTaa = Context.splitView;
 		if (!skipTaa) {
 			@:privateAccess Scene.active.camera.frame = RenderPathDeferred.taaFrame;
 			@:privateAccess Scene.active.camera.projectionJitter();
@@ -42,8 +42,8 @@ class RenderPathForward {
 		RenderPathPaint.draw();
 		#end
 
-		#if kha_direct3d12
-		if (UITrait.inst.viewportMode == ViewPathTrace) {
+		#if (kha_direct3d12 || kha_vulkan)
+		if (Context.viewportMode == ViewPathTrace) {
 			RenderPathRaytrace.draw();
 			return;
 		}
@@ -61,14 +61,23 @@ class RenderPathForward {
 
 	static function drawGbuffer() {
 		path.setTarget("gbuffer0");
+		#if kha_metal
+		path.clearTarget(0x00000000, 1.0);
+		#else
 		path.clearTarget(null, 1.0);
+		#end
 		path.setTarget("gbuffer2");
 		path.clearTarget(0xff000000);
 		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
+		var currentG = path.currentG;
 		#if arm_painter
 		RenderPathPaint.bindLayers();
 		#end
 		path.drawMeshes("mesh");
+		#if arm_painter
+		RenderPathPaint.unbindLayers();
+		#end
+		LineDraw.render(path.currentG);
 	}
 
 	static function drawForward() {
@@ -109,7 +118,7 @@ class RenderPathForward {
 		path.drawShader("shader_datas/smaa_neighborhood_blend/smaa_neighborhood_blend");
 
 		#if arm_painter
-		var skipTaa = UITrait.inst.splitView;
+		var skipTaa = Context.splitView;
 		#else
 		var skipTaa = false;
 		#end
@@ -141,25 +150,25 @@ class RenderPathForward {
 	}
 
 	static function drawSplit() {
-		if (UITrait.inst.splitView) {
+		if (Context.splitView) {
 			if (Context.pdirty > 0) {
 				var cam = Scene.active.camera;
 
-				UITrait.inst.viewIndex = UITrait.inst.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[UITrait.inst.viewIndex]);
+				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
 				cam.buildMatrix();
 				cam.buildProjection();
 
 				drawGbuffer();
 
-				#if kha_direct3d12
-				UITrait.inst.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawForward();
+				#if (kha_direct3d12 || kha_vulkan)
+				Context.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawForward();
 				#else
 				drawForward();
 				#end
 
-				UITrait.inst.viewIndex = UITrait.inst.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[UITrait.inst.viewIndex]);
+				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
 				cam.buildMatrix();
 				cam.buildProjection();
 			}

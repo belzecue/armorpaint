@@ -16,8 +16,8 @@ import iron.object.Object;
 import iron.object.MeshObject;
 import iron.Scene;
 import iron.RenderPath;
-import arm.Project;
-import arm.ui.UITrait;
+import arm.ProjectFormat;
+import arm.ui.UISidebar;
 import arm.ui.UIFiles;
 import arm.sys.Path;
 import arm.sys.File;
@@ -29,8 +29,7 @@ import arm.data.LayerSlot;
 import arm.data.BrushSlot;
 import arm.data.MaterialSlot;
 import arm.node.MaterialParser;
-import arm.Tool;
-using StringTools;
+import arm.Enums;
 
 class ImportArm {
 
@@ -61,14 +60,8 @@ class ImportArm {
 	}
 
 	public static function runScene(raw: TSceneFormat, path: String) {
-		#if krom_windows
-		path = path.replace("\\", "/");
-		#end
 		var _dataPath = Data.dataPath;
-		Data.dataPath = path.substring(0, path.lastIndexOf("/") + 1);
-		#if krom_windows
-		Data.dataPath = Data.dataPath.replace("/", "\\");
-		#end
+		Data.dataPath = path.substring(0, path.lastIndexOf(Path.sep) + 1);
 		raw.name += "_imported";
 		Data.cachedSceneRaws.set(raw.name, raw);
 		Scene.active.addScene(raw.name, null, function(sceneObject: Object) {
@@ -94,15 +87,19 @@ class ImportArm {
 
 	public static function runProject(path: String) {
 		Data.getBlob(path, function(b: Blob) {
+			var project: TProjectFormat = ArmPack.decode(b.toBytes());
+
+			// Import as material instead
+			if (project.version != null && project.layer_datas == null) {
+				runMaterialFromProject(project, path);
+				return;
+			}
 
 			Context.layersPreviewDirty = true;
-			var resetLayers = false;
-			Project.projectNew(resetLayers);
-			path = path.replace("\\", "/");
+			Project.projectNew(false);
 			Project.filepath = path;
-			UIFiles.filename = path.substring(path.lastIndexOf("/") + 1, path.lastIndexOf("."));
+			UIFiles.filename = path.substring(path.lastIndexOf(Path.sep) + 1, path.lastIndexOf("."));
 			Window.get(0).title = UIFiles.filename + " - ArmorPaint";
-			var project: TProjectFormat = ArmPack.decode(b.toBytes());
 
 			// Import as mesh instead
 			if (project.version == null) {
@@ -110,41 +107,34 @@ class ImportArm {
 				return;
 			}
 
-			if (project.layer_datas == null) {
-				runMaterialFromProject(project, Project.filepath);
-				return;
-			}
+			// Save to recent
+			var recent = Config.raw.recent_projects;
+			recent.remove(path);
+			recent.unshift(path);
+			Config.save();
 
 			Project.raw = project;
-			var base = Path.baseDir(path);
 
+			var l0 = project.layer_datas[0];
+			App.resHandle.position = Config.getTextureResPos(l0.res);
+			var bitsPos = l0.bpp == 8 ? Bits8 : l0.bpp == 16 ? Bits16 : Bits32;
+			App.bitsHandle.position = bitsPos;
+			var bytesPerPixel = Std.int(l0.bpp / 8);
+			var format = l0.bpp == 8 ? TextureFormat.RGBA32 : l0.bpp == 16 ? TextureFormat.RGBA64 : TextureFormat.RGBA128;
+
+			var base = Path.baseDir(path);
 			for (file in project.assets) {
+				#if krom_windows
+				file = file.replace("/", "\\");
+				#else
+				file = file.replace("\\", "/");
+				#end
 				// Convert image path from relative to absolute
-				var isAbsolute = file.charAt(0) == "/" || file.charAt(1) == ":";
-				var abs = isAbsolute ? file : base + file;
+				var abs = Data.isAbsolute(file) ? file : base + file;
 				if (!File.exists(abs)) {
 					makePink(abs);
 				}
 				ImportTexture.run(abs);
-			}
-
-			var m0: MaterialData = null;
-			Data.getMaterial("Scene", "Material", function(m: MaterialData) {
-				m0 = m;
-			});
-
-			Project.materials = [];
-			for (n in project.material_nodes) {
-				initNodes(n.nodes);
-				Context.material = new MaterialSlot(m0, n);
-				Project.materials.push(Context.material);
-				MaterialParser.parsePaintMaterial();
-				RenderUtil.makeMaterialPreview();
-			}
-
-			Project.brushes = [];
-			for (n in project.brush_nodes) {
-				Project.brushes.push(new BrushSlot(n));
 			}
 
 			// Synchronous for now
@@ -168,8 +158,7 @@ class ImportArm {
 
 			if (project.mesh_assets != null && project.mesh_assets.length > 0) {
 				var file = project.mesh_assets[0];
-				var isAbsolute = file.charAt(0) == "/" || file.charAt(1) == ":";
-				var abs = isAbsolute ? file : base + file;
+				var abs = Data.isAbsolute(file) ? file : base + file;
 				Project.meshAssets = [abs];
 			}
 
@@ -180,26 +169,19 @@ class ImportArm {
 			Context.paintObject.skip_context = "paint";
 			Context.mergedObject.visible = true;
 
-			var l0 = project.layer_datas[0];
-			App.resHandle.position = Config.getTextureResPos(l0.res);
-			if (l0.bpp == null) l0.bpp = 8; // TODO: deprecated
-			var bitsPos = l0.bpp == 8 ? Bits8 : l0.bpp == 16 ? Bits16 : Bits32;
-			App.bitsHandle.position = bitsPos;
-			var bytesPerPixel = Std.int(l0.bpp / 8);
-			var format = l0.bpp == 8 ? TextureFormat.RGBA32 : l0.bpp == 16 ? TextureFormat.RGBA64 : TextureFormat.RGBA128;
-
-			if (Project.layers[0].texpaint.width != Config.getTextureRes()) {
+			var tex = Project.layers[0].texpaint;
+			if (tex.width != Config.getTextureResX() || tex.height != Config.getTextureResY()) {
 				for (l in Project.layers) l.resizeAndSetBits();
 				if (History.undoLayers != null) for (l in History.undoLayers) l.resizeAndSetBits();
 				var rts = RenderPath.active.renderTargets;
 				rts.get("texpaint_blend0").image.unload();
-				rts.get("texpaint_blend0").raw.width = Config.getTextureRes();
-				rts.get("texpaint_blend0").raw.height = Config.getTextureRes();
-				rts.get("texpaint_blend0").image = Image.createRenderTarget(Config.getTextureRes(), Config.getTextureRes(), TextureFormat.L8, DepthStencilFormat.NoDepthAndStencil);
+				rts.get("texpaint_blend0").raw.width = Config.getTextureResX();
+				rts.get("texpaint_blend0").raw.height = Config.getTextureResY();
+				rts.get("texpaint_blend0").image = Image.createRenderTarget(Config.getTextureResX(), Config.getTextureResY(), TextureFormat.L8, DepthStencilFormat.NoDepthAndStencil);
 				rts.get("texpaint_blend1").image.unload();
-				rts.get("texpaint_blend1").raw.width = Config.getTextureRes();
-				rts.get("texpaint_blend1").raw.height = Config.getTextureRes();
-				rts.get("texpaint_blend1").image = Image.createRenderTarget(Config.getTextureRes(), Config.getTextureRes(), TextureFormat.L8, DepthStencilFormat.NoDepthAndStencil);
+				rts.get("texpaint_blend1").raw.width = Config.getTextureResX();
+				rts.get("texpaint_blend1").raw.height = Config.getTextureResY();
+				rts.get("texpaint_blend1").image = Image.createRenderTarget(Config.getTextureResX(), Config.getTextureResY(), TextureFormat.L8, DepthStencilFormat.NoDepthAndStencil);
 				Context.brushBlendDirty = true;
 			}
 
@@ -207,55 +189,118 @@ class ImportArm {
 			Project.layers = [];
 			for (i in 0...project.layer_datas.length) {
 				var ld = project.layer_datas[i];
-				var l = new LayerSlot();
+				var isGroup = ld.texpaint == null;
+				var l = new LayerSlot("", isGroup);
+				if (ld.name != null) l.name = ld.name;
 				Project.layers.push(l);
 
-				// TODO: create render target from bytes
-				var texpaint = Image.fromBytes(Lz4.decode(ld.texpaint, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
-				l.texpaint.g2.begin(false);
-				l.texpaint.g2.drawImage(texpaint, 0, 0);
-				l.texpaint.g2.end();
-				// texpaint.unload();
+				if (!isGroup) {
+					if (Layers.pipeMerge == null) Layers.makePipe();
 
-				var texpaint_nor = Image.fromBytes(Lz4.decode(ld.texpaint_nor, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
-				l.texpaint_nor.g2.begin(false);
-				l.texpaint_nor.g2.drawImage(texpaint_nor, 0, 0);
-				l.texpaint_nor.g2.end();
-				// texpaint_nor.unload();
+					// TODO: create render target from bytes
+					var texpaint = Image.fromBytes(Lz4.decode(ld.texpaint, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
+					l.texpaint.g2.begin(false);
+					l.texpaint.g2.pipeline = project.is_bgra ? Layers.pipeCopyBGRA : Layers.pipeCopy;
+					l.texpaint.g2.drawImage(texpaint, 0, 0);
+					l.texpaint.g2.pipeline = null;
+					l.texpaint.g2.end();
 
-				var texpaint_pack = Image.fromBytes(Lz4.decode(ld.texpaint_pack, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
-				l.texpaint_pack.g2.begin(false);
-				l.texpaint_pack.g2.drawImage(texpaint_pack, 0, 0);
-				l.texpaint_pack.g2.end();
-				// texpaint_pack.unload();
+					var texpaint_nor = Image.fromBytes(Lz4.decode(ld.texpaint_nor, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
+					l.texpaint_nor.g2.begin(false);
+					l.texpaint_nor.g2.pipeline = project.is_bgra ? Layers.pipeCopyBGRA : Layers.pipeCopy;
+					l.texpaint_nor.g2.drawImage(texpaint_nor, 0, 0);
+					l.texpaint_nor.g2.pipeline = null;
+					l.texpaint_nor.g2.end();
 
-				if (ld.texpaint_mask != null) {
-					l.createMask(0, false);
-					var texpaint_mask = Image.fromBytes(Lz4.decode(ld.texpaint_mask, ld.res * ld.res), ld.res, ld.res, TextureFormat.L8);
-					l.texpaint_mask.g2.begin(false);
-					l.texpaint_mask.g2.drawImage(texpaint_mask, 0, 0);
-					l.texpaint_mask.g2.end();
-					// texpaint_mask.unload();
+					var texpaint_pack = Image.fromBytes(Lz4.decode(ld.texpaint_pack, ld.res * ld.res * 4 * bytesPerPixel), ld.res, ld.res, format);
+					l.texpaint_pack.g2.begin(false);
+					l.texpaint_pack.g2.pipeline = project.is_bgra ? Layers.pipeCopyBGRA : Layers.pipeCopy;
+					l.texpaint_pack.g2.drawImage(texpaint_pack, 0, 0);
+					l.texpaint_pack.g2.pipeline = null;
+					l.texpaint_pack.g2.end();
+
+					var texpaint_mask: kha.Image = null;
+					if (ld.texpaint_mask != null) {
+						l.createMask(0, false);
+						texpaint_mask = Image.fromBytes(Lz4.decode(ld.texpaint_mask, ld.res * ld.res), ld.res, ld.res, TextureFormat.L8);
+						l.texpaint_mask.g2.begin(false);
+						l.texpaint_mask.g2.pipeline = Layers.pipeCopy8;
+						l.texpaint_mask.g2.drawImage(texpaint_mask, 0, 0);
+						l.texpaint_mask.g2.pipeline = null;
+						l.texpaint_mask.g2.end();
+					}
+
+					l.scale = ld.uv_scale;
+					l.angle = ld.uv_rot;
+					l.uvType = ld.uv_type;
+					l.maskOpacity = ld.opacity_mask;
+					l.objectMask = ld.object_mask;
+					l.blending = ld.blending;
+					l.visible = ld.visible;
+					l.paintBase = ld.paint_base;
+					l.paintOpac = ld.paint_opac;
+					l.paintOcc = ld.paint_occ;
+					l.paintRough = ld.paint_rough;
+					l.paintMet = ld.paint_met;
+					l.paintNor = ld.paint_nor;
+					l.paintHeight = ld.paint_height;
+					l.paintEmis = ld.paint_emis;
+					l.paintSubs = ld.paint_subs;
+
+					// texpaint.unload();
+					// texpaint_nor.unload();
+					// texpaint_pack.unload();
+					// if (texpaint_mask != null) texpaint_mask.unload();
 				}
-
-				l.uvScale = ld.uv_scale;
-				if (l.uvScale == null) l.uvScale = 1.0; // TODO: deprecated
-				l.uvRot = ld.uv_rot;
-				if (l.uvRot == null) l.uvRot = 0.0; // TODO: deprecated
-				l.uvType = ld.uv_type;
-				if (l.uvType == null) l.uvType = 0; // TODO: deprecated
-				l.maskOpacity = ld.opacity_mask;
-				l.material_mask = ld.material_mask > -1 ? Project.materials[ld.material_mask] : null;
-				l.objectMask = ld.object_mask;
-				l.blending = ld.blending;
-				if (l.blending == null) l.blending = 0; // TODO: deprecated
 			}
+
+			// Create groups
+			for (i in 0...project.layer_datas.length) {
+				var ld = project.layer_datas[i];
+				if (ld.parent >= 0) Project.layers[i].parent = Project.layers[ld.parent];
+			}
+
 			Context.setLayer(Project.layers[0]);
 
+			// Materials
+			var m0: MaterialData = null;
+			Data.getMaterial("Scene", "Material", function(m: MaterialData) {
+				m0 = m;
+			});
+
+			Project.materials = [];
+			for (n in project.material_nodes) {
+				initNodes(n.nodes);
+				Context.material = new MaterialSlot(m0, n);
+				Project.materials.push(Context.material);
+				MaterialParser.parsePaintMaterial();
+				RenderUtil.makeMaterialPreview();
+			}
+
+			Project.brushes = [];
+			for (n in project.brush_nodes) {
+				initNodes(n.nodes);
+				Context.brush = new BrushSlot(n);
+				Project.brushes.push(Context.brush);
+				MaterialParser.parseBrush();
+				Context.parseBrushInputs();
+				RenderUtil.makeBrushPreview();
+			}
+
+			// Fill layers
+			for (i in 0...project.layer_datas.length) {
+				var ld = project.layer_datas[i];
+				var l = Project.layers[i];
+				var isGroup = ld.texpaint == null;
+				if (!isGroup) {
+					l.material_mask = ld.material_mask > -1 ? Project.materials[ld.material_mask] : null;
+				}
+			}
+
 			Context.ddirty = 4;
-			UITrait.inst.hwnd.redraws = 2;
-			UITrait.inst.hwnd1.redraws = 2;
-			UITrait.inst.hwnd2.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd1.redraws = 2;
+			UISidebar.inst.hwnd2.redraws = 2;
 
 			Data.deleteBlob(path);
 		});
@@ -272,9 +317,13 @@ class ImportArm {
 	public static function runMaterialFromProject(project: TProjectFormat, path: String) {
 		var base = Path.baseDir(path);
 		for (file in project.assets) {
+			#if krom_windows
+			file = file.replace("/", "\\");
+			#else
+			file = file.replace("\\", "/");
+			#end
 			// Convert image path from relative to absolute
-			var isAbsolute = file.charAt(0) == "/" || file.charAt(1) == ":";
-			var abs = isAbsolute ? file : base + file;
+			var abs = Data.isAbsolute(file) ? file : base + file;
 			if (!File.exists(abs)) {
 				makePink(abs);
 			}
@@ -305,7 +354,53 @@ class ImportArm {
 		}
 		iron.App.notifyOnRender(makeMaterialPreview);
 
-		UITrait.inst.hwnd1.redraws = 2;
+		UISidebar.inst.hwnd1.redraws = 2;
+		Data.deleteBlob(path);
+	}
+
+	public static function runBrush(path: String) {
+		Data.getBlob(path, function(b: Blob) {
+			var project: TProjectFormat = ArmPack.decode(b.toBytes());
+			if (project.version == null) { Data.deleteBlob(path); return; }
+			runBrushFromProject(project, path);
+		});
+	}
+
+	public static function runBrushFromProject(project: TProjectFormat, path: String) {
+		var base = Path.baseDir(path);
+		for (file in project.assets) {
+			#if krom_windows
+			file = file.replace("/", "\\");
+			#else
+			file = file.replace("\\", "/");
+			#end
+			// Convert image path from relative to absolute
+			var abs = Data.isAbsolute(file) ? file : base + file;
+			if (!File.exists(abs)) {
+				makePink(abs);
+			}
+			arm.io.ImportTexture.run(abs);
+		}
+
+		var imported: Array<BrushSlot> = [];
+
+		for (n in project.brush_nodes) {
+			initNodes(n.nodes);
+			Context.brush = new BrushSlot(n);
+			Project.brushes.push(Context.brush);
+			imported.push(Context.brush);
+		}
+
+		function makeBrushPreview(_) {
+			for (b in imported) {
+				Context.setBrush(b);
+				RenderUtil.makeBrushPreview();
+			}
+			iron.App.removeRender(makeBrushPreview);
+		}
+		iron.App.notifyOnRender(makeBrushPreview);
+
+		UISidebar.inst.hwnd1.redraws = 2;
 		Data.deleteBlob(path);
 	}
 
@@ -323,14 +418,7 @@ class ImportArm {
 	static function initNodes(nodes: Array<TNode>) {
 		for (node in nodes) {
 			if (node.type == "TEX_IMAGE") {
-				// TODO: deprecated, stores filename now
-				var s = node.buttons[0].data + "";
-				node.buttons[0].data = s.substr(s.lastIndexOf("/") + 1);
-				//
 				node.buttons[0].default_value = App.getAssetIndex(node.buttons[0].data);
-			}
-			for (inp in node.inputs) { // Round input socket values
-				if (inp.type == "VALUE") inp.default_value = Math.round(inp.default_value * 100) / 100;
 			}
 		}
 	}

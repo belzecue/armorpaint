@@ -2,10 +2,10 @@ package arm.node;
 
 import iron.object.MeshObject;
 import iron.data.SceneFormat;
-import arm.ui.UITrait;
+import arm.ui.UIHeader;
 import arm.ui.UINodes;
 import arm.node.MaterialShader;
-import arm.Tool;
+import arm.Enums;
 
 class MakeMeshPreview {
 
@@ -13,14 +13,17 @@ class MakeMeshPreview {
 	public static var opacityDiscardScene = 0.5;
 
 	public static function run(data: MaterialShaderData, matcon: TMaterialContext): MaterialShaderContext {
-		var isScene = UITrait.inst.worktab.position == SpaceScene;
+		var isScene = UIHeader.inst.worktab.position == SpaceRender;
 		var context_id = "mesh";
 		var con_mesh: MaterialShaderContext = data.add_context({
 			name: context_id,
 			depth_write: true,
 			compare_mode: "less",
-			cull_mode: (UITrait.inst.cullBackfaces || !isScene) ? "clockwise" : "none",
-			vertex_elements: [{name: "pos", data: "short4norm"}, {name: "nor", data: "short2norm"}, {name: "tex", data: "short2norm"}] });
+			cull_mode: (Context.cullBackfaces || !isScene) ? "clockwise" : "none",
+			vertex_elements: [{name: "pos", data: "short4norm"}, {name: "nor", data: "short2norm"}, {name: "tex", data: "short2norm"}],
+			color_attachments: ["RGBA64", "RGBA64", "RGBA64"],
+			depth_attachment: "DEPTH32"
+		});
 
 		var vert = con_mesh.make_vert();
 		var frag = con_mesh.make_frag();
@@ -29,7 +32,7 @@ class MakeMeshPreview {
 
 		#if arm_skin
 		var isMesh = Std.is(Context.object, MeshObject);
-		var skin = isMesh && cast(Context.object, MeshObject).data.geom.bones != null;
+		var skin = isMesh && cast(Context.object, MeshObject).data.geom.getVArray("bone") != null;
 		if (skin) {
 			pos = "spos";
 			con_mesh.add_elem("bone", 'short4norm');
@@ -74,13 +77,9 @@ class MakeMeshPreview {
 		frag.write('float opacity = $opac;');
 		frag.write('vec3 nortan = $nortan;');
 
-		var decal = UITrait.inst.decalPreview;
+		var decal = Context.decalPreview;
 		if (decal) {
-			if (Context.tool == ToolDecal) {
-				frag.add_uniform('sampler2D texdecalmask', '_texdecalmask');
-				frag.write('opacity *= textureLod(texdecalmask, texCoord, 0.0).r;');
-			}
-			else if (Context.tool == ToolText) {
+			if (Context.tool == ToolText) {
 				frag.add_uniform('sampler2D textexttool', '_textexttool');
 				frag.write('opacity *= textureLod(textexttool, texCoord, 0.0).r;');
 			}
@@ -94,7 +93,6 @@ class MakeMeshPreview {
 		frag.n = true;
 
 		frag.add_function(MaterialFunctions.str_packFloatInt16);
-		frag.add_function(MaterialFunctions.str_packFloat2);
 		frag.add_function(MaterialFunctions.str_cotangentFrame);
 		frag.add_function(MaterialFunctions.str_octahedronWrap);
 
@@ -104,7 +102,7 @@ class MakeMeshPreview {
 		}
 		else {
 			frag.vVec = true;
-			#if (kha_direct3d11 || kha_direct3d12)
+			#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 			frag.write('mat3 TBN = cotangentFrame(n, vVec, texCoord);');
 			#else
 			frag.write('mat3 TBN = cotangentFrame(n, -vVec, texCoord);');
@@ -118,7 +116,7 @@ class MakeMeshPreview {
 		frag.write('n.xy = n.z >= 0.0 ? n.xy : octahedronWrap(n.xy);');
 		// uint matid = 0;
 		frag.write('fragColor[0] = vec4(n.x, n.y, roughness, packFloatInt16(metallic, uint(0)));'); // metallic/matid
-		frag.write('fragColor[1] = vec4(basecol.r, basecol.g, basecol.b, packFloat2(occlusion, 1.0));'); // occ/spec
+		frag.write('fragColor[1] = vec4(basecol.r, basecol.g, basecol.b, occlusion);');
 		frag.write('fragColor[2] = vec4(0.0, 0.0, 0.0, 0.0);'); // veloc
 
 		Material.finalize(con_mesh);

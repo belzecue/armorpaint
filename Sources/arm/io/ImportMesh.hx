@@ -10,11 +10,11 @@ import arm.util.MeshUtil;
 import arm.util.UVUtil;
 import arm.util.ViewportUtil;
 import arm.sys.Path;
-import arm.ui.UITrait;
+import arm.ui.UIHeader;
+import arm.ui.UISidebar;
 import arm.ui.UIView2D;
 import arm.Project;
-import arm.Tool;
-using StringTools;
+import arm.Enums;
 
 class ImportMesh {
 
@@ -67,11 +67,12 @@ class ImportMesh {
 		}
 		Project.meshAssets = [path];
 
-		if (UITrait.inst.worktab.position == SpacePaint) {
+		if (UIHeader.inst.worktab.position != SpaceRender) {
 			ViewportUtil.scaleToBounds();
 		}
 
 		if (Context.paintObject.name == "") Context.paintObject.name = "Object";
+		arm.node.MaterialParser.parsePaintMaterial();
 		arm.node.MaterialParser.parseMeshMaterial();
 
 		UIView2D.inst.hwnd.redraws = 2;
@@ -80,42 +81,39 @@ class ImportMesh {
 		trace("Mesh imported in " + (iron.system.Time.realTime() - timer));
 		#end
 
-		#if kha_direct3d12
+		#if (kha_direct3d12 || kha_vulkan)
 		arm.render.RenderPathRaytrace.ready = false;
 		#end
 	}
 
 	public static function makeMesh(mesh: Dynamic, path: String) {
-		if (mesh == null || mesh.posa == null || mesh.nora == null || mesh.inda == null) {
+		if (mesh == null || mesh.posa == null || mesh.nora == null || mesh.inda == null || mesh.posa.length == 0) {
 			Log.error(Strings.error3);
 			return;
 		}
 
 		var raw: TMeshData = null;
-		if (UITrait.inst.worktab.position == SpaceScene) {
+		if (UIHeader.inst.worktab.position == SpaceRender) {
 			raw = rawMesh(mesh);
-			if (mesh.texa != null) raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex" });
+			if (mesh.texa != null) raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex", data: "short2norm" });
 		}
 		else {
-			if (mesh.texa == null) {
-				equirectUnwrap(mesh);
-			}
 			raw = rawMesh(mesh);
-			raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex" });
+			if (mesh.texa == null) equirectUnwrap(mesh);
+			raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex", data: "short2norm" });
+			if (mesh.cola != null) raw.vertex_arrays.push({ values: mesh.cola, attrib: "col", data: "short4norm", padding: 1 });
 		}
 
 		new MeshData(raw, function(md: MeshData) {
 
 			// Append
-			if (UITrait.inst.worktab.position == SpaceScene) {
+			if (UIHeader.inst.worktab.position == SpaceRender) {
 				var mats = new haxe.ds.Vector(1);
 				mats[0] = Context.materialScene.data;
 				var object = Scene.active.addMeshObject(md, mats, Scene.active.getChild("Scene"));
-				path = path.replace("\\", "/");
-				var ar = path.split("/");
+				var ar = path.split(Path.sep);
 				var s = ar[ar.length - 1];
 				object.name = s.substring(0, s.length - 4);
-
 				// md.geom.calculateAABB();
 				// var aabb = md.geom.aabb;
 				// var dim = new TFloat32Array(3);
@@ -123,10 +121,6 @@ class ImportMesh {
 				// dim[1] = aabb.y;
 				// dim[2] = aabb.z;
 				// object.raw.dimensions = dim;
-				#if arm_physics
-				object.addTrait(new arm.plugin.PhysicsBody());
-				#end
-
 				Context.selectObject(object);
 			}
 			else { // Replace
@@ -168,9 +162,9 @@ class ImportMesh {
 			Data.cachedMeshes.set(md.handle, md);
 
 			Context.ddirty = 4;
-			UITrait.inst.hwnd.redraws = 2;
-			UITrait.inst.hwnd1.redraws = 2;
-			UITrait.inst.hwnd2.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd1.redraws = 2;
+			UISidebar.inst.hwnd2.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
 		});
@@ -182,7 +176,7 @@ class ImportMesh {
 			equirectUnwrap(mesh);
 		}
 		var raw = rawMesh(mesh);
-		raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex" });
+		raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex", data: "short2norm" });
 
 		new MeshData(raw, function(md: MeshData) {
 
@@ -196,7 +190,7 @@ class ImportMesh {
 			Data.cachedMeshes.set(md.handle, md);
 
 			Context.ddirty = 4;
-			UITrait.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
 		});
@@ -222,8 +216,8 @@ class ImportMesh {
 		return {
 			name: mesh.name,
 			vertex_arrays: [
-				{ values: mesh.posa, attrib: "pos" },
-				{ values: mesh.nora, attrib: "nor" }
+				{ values: mesh.posa, attrib: "pos", data: "short4norm" },
+				{ values: mesh.nora, attrib: "nor", data: "short2norm" }
 			],
 			index_arrays: [
 				{ values: mesh.inda, material: 0 }

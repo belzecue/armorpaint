@@ -12,12 +12,15 @@ import iron.object.MeshObject;
 import iron.Scene;
 import arm.util.RenderUtil;
 import arm.util.ViewportUtil;
+import arm.sys.File;
 import arm.sys.Path;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 import arm.ui.UIFiles;
 import arm.ui.UIBox;
+import arm.ui.UINodes;
 import arm.data.LayerSlot;
 import arm.data.BrushSlot;
+import arm.data.FontSlot;
 import arm.data.MaterialSlot;
 import arm.node.MaterialParser;
 import arm.io.ImportAsset;
@@ -25,8 +28,9 @@ import arm.io.ImportArm;
 import arm.io.ImportBlend;
 import arm.io.ImportMesh;
 import arm.io.ExportArm;
-import arm.Tool;
-using StringTools;
+import arm.node.NodesBrush;
+import arm.ProjectFormat;
+import arm.Enums;
 
 class Project {
 
@@ -40,11 +44,13 @@ class Project {
 	public static var materialsScene: Array<MaterialSlot> = null;
 	public static var brushes: Array<BrushSlot> = null;
 	public static var layers: Array<LayerSlot> = null;
+	public static var fonts: Array<FontSlot> = null;
 	public static var paintObjects: Array<MeshObject> = null;
 	public static var assetMap = new Map<Int, Dynamic>(); // kha.Image | kha.Font
 	#if arm_world
 	public static var waterPass = true;
 	#end
+	static var meshList: Array<String> = null;
 
 	public static function projectOpen() {
 		UIFiles.show("arm", false, function(path: String) {
@@ -60,6 +66,28 @@ class Project {
 
 			if (current != null) current.begin(false);
 		});
+	}
+
+	public static function projectOpenRecentBox() {
+		UIBox.showCustom(function(ui: Zui) {
+			if (ui.tab(Id.handle(), tr("Recent Projects"))) {
+				for (path in Config.raw.recent_projects) {
+					if (ui.button(path, Left)) {
+						var current = @:privateAccess kha.graphics4.Graphics2.current;
+						if (current != null) current.end();
+
+						ImportArm.runProject(path);
+
+						if (current != null) current.begin(false);
+						UIBox.show = false;
+					}
+				}
+				if (ui.button("Clear", Left)) {
+					Config.raw.recent_projects = [];
+					Config.save();
+				}
+			}
+		}, 400, 320);
 	}
 
 	public static function projectSave(saveAndQuit = false) {
@@ -80,8 +108,8 @@ class Project {
 	public static function projectSaveAs() {
 		UIFiles.show("arm", true, function(path: String) {
 			var f = UIFiles.filename;
-			if (f == "") f = "untitled";
-			filepath = path + "/" + f;
+			if (f == "") f = tr("untitled");
+			filepath = path + Path.sep + f;
 			if (!filepath.endsWith(".arm")) filepath += ".arm";
 			projectSave();
 		});
@@ -89,10 +117,26 @@ class Project {
 
 	public static function projectNewBox() {
 		UIBox.showCustom(function(ui: Zui) {
-			if (ui.tab(Id.handle(), "New Project")) {
+			if (ui.tab(Id.handle(), tr("New Project"))) {
+				if (meshList == null) {
+					meshList = File.readDirectory(Path.data() + Path.sep + "meshes");
+					for (i in 0...meshList.length) meshList[i] = meshList[i].substr(0, meshList[i].length - 4); // Trim .arm
+					meshList.unshift("plane");
+					meshList.unshift("sphere");
+					meshList.unshift("rounded_cube");
+
+				}
+
 				ui.row([0.5, 0.5]);
-				UITrait.inst.projectType = ui.combo(Id.handle({position: UITrait.inst.projectType}), ["Cube", "Sphere", "Tessellated Plane"], "Template");
-				if (ui.button("OK") || ui.isReturnDown) {
+				Context.projectType = ui.combo(Id.handle({position: Context.projectType}), meshList, tr("Template"), true);
+				Context.projectAspectRatio = ui.combo(Id.handle({position: Context.projectAspectRatio}), ["1:1", "2:1", "1:2"], tr("Aspect Ratio"), true);
+
+				@:privateAccess ui.endElement();
+				ui.row([0.5, 0.5]);
+				if (ui.button(tr("Cancel"))) {
+					UIBox.show = false;
+				}
+				if (ui.button(tr("OK")) || ui.isReturnDown) {
 					Project.projectNew();
 					ViewportUtil.scaleToBounds();
 					UIBox.show = false;
@@ -127,7 +171,7 @@ class Project {
 		var len = meshes.length;
 		for (i in 0...len) {
 			var m = meshes[len - i - 1];
-			if (UITrait.inst.projectObjects.indexOf(m) == -1) {
+			if (Context.projectObjects.indexOf(m) == -1) {
 				Data.deleteMesh(m.data.handle);
 				m.remove();
 			}
@@ -137,47 +181,52 @@ class Project {
 			Data.deleteMesh(handle);
 		}
 
-		if (UITrait.inst.projectType != ModelCube) {
-			var mesh: Dynamic = UITrait.inst.projectType == ModelSphere ?
-				new arm.format.proc.Sphere(1, 512, 256) :
-				new arm.format.proc.Plane(1, 1, 512, 512);
-			var raw = {
-				name: "Tessellated",
-				vertex_arrays: [
-					{ values: mesh.posa, attrib: "pos" },
-					{ values: mesh.nora, attrib: "nor" },
-					{ values: mesh.texa, attrib: "tex" }
-				],
-				index_arrays: [
-					{ values: mesh.inda, material: 0 }
-				],
-				scale_pos: mesh.scalePos,
-				scale_tex: mesh.scaleTex
-			};
+		if (Context.projectType != ModelRoundedCube) {
+			var raw: TMeshData = null;
+			if (Context.projectType == ModelSphere || Context.projectType == ModelTessellatedPlane) {
+				var mesh: Dynamic = Context.projectType == ModelSphere ?
+					new arm.format.proc.Sphere(1, 512, 256) :
+					new arm.format.proc.Plane(1, 1, 512, 512);
+				raw = {
+					name: "Tessellated",
+					vertex_arrays: [
+						{ values: mesh.posa, attrib: "pos", data: "short4norm" },
+						{ values: mesh.nora, attrib: "nor", data: "short2norm" },
+						{ values: mesh.texa, attrib: "tex", data: "short2norm" }
+					],
+					index_arrays: [
+						{ values: mesh.inda, material: 0 }
+					],
+					scale_pos: mesh.scalePos,
+					scale_tex: mesh.scaleTex
+				};
+			}
+			else {
+				Data.getBlob("meshes/" + meshList[Context.projectType] + ".arm", function(b: kha.Blob) {
+					raw = iron.system.ArmPack.decode(b.toBytes()).mesh_datas[0];
+				});
+			}
+
 			var md = new MeshData(raw, function(md: MeshData) {});
 			Data.cachedMeshes.set("SceneTessellated", md);
 
-			if (UITrait.inst.projectType == ModelSphere) {
-				ViewportUtil.setView(0, 0, 1, 0, 0, 0); // Top
-				ViewportUtil.orbit(0, Math.PI / 6); // Orbit down
-			}
-			else if (UITrait.inst.projectType == ModelTessellatedPlane) {
+			if (Context.projectType == ModelTessellatedPlane) {
 				ViewportUtil.setView(0, 0, 5, 0, 0, 0); // Top
 				ViewportUtil.orbit(0, Math.PI / 6); // Orbit down
 			}
 		}
 
-		var n = UITrait.inst.projectType == ModelCube ? "Cube" : "Tessellated";
+		var n = Context.projectType == ModelRoundedCube ? "Cube" : "Tessellated";
 		Data.getMesh("Scene", n, function(md: MeshData) {
 
 			var current = @:privateAccess kha.graphics4.Graphics2.current;
 			if (current != null) current.end();
 
-			UITrait.inst.pickerMaskHandle.position = MaskNone;
+			Context.pickerMaskHandle.position = MaskNone;
 			Context.paintObject.setData(md);
 			Context.paintObject.transform.scale.set(1, 1, 1);
 			#if arm_creator
-			if (UITrait.inst.projectType == ModelTessellatedPlane) {
+			if (Context.projectType == ModelTessellatedPlane) {
 				Context.paintObject.transform.loc.set(0, 0, -0.15);
 				Context.paintObject.transform.scale.set(10, 10, 1);
 			}
@@ -192,6 +241,9 @@ class Project {
 			Context.material = materials[0];
 			brushes = [new BrushSlot()];
 			Context.brush = brushes[0];
+			var fontNames = App.font.getFontNames();
+			fonts = [new FontSlot(fontNames.length > 0 ? fontNames[0] : "default.ttf", App.font)];
+			Context.font = fonts[0];
 
 			History.reset();
 
@@ -202,27 +254,31 @@ class Project {
 			assetNames = [];
 			assetId = 0;
 			Context.ddirty = 4;
-			UITrait.inst.hwnd.redraws = 2;
-			UITrait.inst.hwnd1.redraws = 2;
-			UITrait.inst.hwnd2.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd1.redraws = 2;
+			UISidebar.inst.hwnd2.redraws = 2;
 
 			if (resetLayers) {
+				var aspectRatioChanged = layers[0].texpaint.width != Config.getTextureResX() || layers[0].texpaint.height != Config.getTextureResY();
 				while (layers.length > 0) layers.pop().unload();
 				var layer = new LayerSlot();
 				layers.push(layer);
 				Context.setLayer(layer);
+				if (aspectRatioChanged) {
+					iron.App.notifyOnRender(Layers.resizeLayers);
+				}
 				iron.App.notifyOnRender(Layers.initLayers);
 			}
 
 			if (current != null) current.begin(false);
 
-			UITrait.inst.savedEnvmap = UITrait.inst.defaultEnvmap;
-			Scene.active.world.envmap = UITrait.inst.emptyEnvmap;
+			Context.savedEnvmap = Context.defaultEnvmap;
+			Scene.active.world.envmap = Context.emptyEnvmap;
 			Scene.active.world.raw.envmap = "World_radiance.k";
-			UITrait.inst.showEnvmapHandle.selected = UITrait.inst.showEnvmap = false;
-			Scene.active.world.probe.radiance = UITrait.inst.defaultRadiance;
-			Scene.active.world.probe.radianceMipmaps = UITrait.inst.defaultRadianceMipmaps;
-			Scene.active.world.probe.irradiance = UITrait.inst.defaultIrradiance;
+			Context.showEnvmapHandle.selected = Context.showEnvmap = false;
+			Scene.active.world.probe.radiance = Context.defaultRadiance;
+			Scene.active.world.probe.radianceMipmaps = Context.defaultRadianceMipmaps;
+			Scene.active.world.probe.irradiance = Context.defaultIrradiance;
 			Scene.active.world.probe.raw.strength = 4.0;
 		});
 	}
@@ -235,6 +291,55 @@ class Project {
 		});
 	}
 
+	public static function importBrush() {
+		UIFiles.show("arm," + Path.textureFormats.join(","), false, function(path: String) {
+			// Create brush from texture
+			if (Path.isTexture(path)) {
+				// Import texture
+				ImportAsset.run(path);
+				var assetIndex = 0;
+				for (i in 0...Project.assets.length) {
+					if (Project.assets[i].file == path) {
+						assetIndex = i;
+						break;
+					}
+				}
+
+				// Create a new brush
+				Context.brush = new BrushSlot();
+				Project.brushes.push(Context.brush);
+
+				// Create and link image node
+				var n = NodesBrush.createNode("TEX_IMAGE");
+				n.x = 83;
+				n.y = 340;
+				n.buttons[0].default_value = assetIndex;
+				var links = Context.brush.canvas.links;
+				links.push({
+					id: Context.brush.nodes.getLinkId(links),
+					from_id: n.id,
+					from_socket: 0,
+					to_id: 0,
+					to_socket: 4
+				});
+
+				// Parse brush
+				MaterialParser.parseBrush();
+				Context.parseBrushInputs();
+				UINodes.inst.hwnd.redraws = 2;
+				function makeBrushPreview(_) {
+					RenderUtil.makeBrushPreview();
+					iron.App.removeRender(makeBrushPreview);
+				}
+				iron.App.notifyOnRender(makeBrushPreview);
+			}
+			// Import from project file
+			else {
+				ImportArm.runBrush(path);
+			}
+		});
+	}
+
 	public static function importMesh() {
 		UIFiles.show(Path.meshFormats.join(","), false, function(path: String) {
 			importMeshBox(path);
@@ -242,30 +347,47 @@ class Project {
 	}
 
 	public static function importMeshBox(path: String) {
+
+		#if krom_ios
+		// Import immediately while access to resource is unlocked
+		Data.getBlob(path, function(b: kha.Blob) {});
+		#end
+
 		UIBox.showCustom(function(ui: Zui) {
-			if (ui.tab(Id.handle(), "Import Mesh")) {
+			if (ui.tab(Id.handle(), tr("Import Mesh"))) {
 
 				if (path.toLowerCase().endsWith(".obj")) {
-					UITrait.inst.splitBy = ui.combo(Id.handle(), ["Object", "Group", "Material", "UDIM Tile"], "Split By", true);
-					if (ui.isHovered) ui.tooltip("Split .obj mesh into objects");
+					Context.splitBy = ui.combo(Id.handle(), [
+						tr("Object"),
+						tr("Group"),
+						tr("Material"),
+						tr("UDIM Tile"),
+					], tr("Split By"), true);
+					if (ui.isHovered) ui.tooltip(tr("Split .obj mesh into objects"));
 				}
 
 				if (path.toLowerCase().endsWith(".fbx")) {
-					UITrait.inst.parseTransform = ui.check(Id.handle({selected: UITrait.inst.parseTransform}), "Parse Transforms");
-					if (ui.isHovered) ui.tooltip("Load per-object transforms from .fbx");
+					Context.parseTransform = ui.check(Id.handle({selected: Context.parseTransform}), tr("Parse Transforms"));
+					if (ui.isHovered) ui.tooltip(tr("Load per-object transforms from .fbx"));
+				}
+
+				if (path.toLowerCase().endsWith(".fbx") || path.toLowerCase().endsWith(".blend")) {
+					Context.parseVCols = ui.check(Id.handle({selected: Context.parseVCols}), tr("Parse Vertex Colors"));
+					if (ui.isHovered) ui.tooltip(tr("Import vertex color data"));
 				}
 
 				ui.row([0.5, 0.5]);
-				if (ui.button("Cancel")) {
+				if (ui.button(tr("Cancel"))) {
 					UIBox.show = false;
 				}
-				if (ui.button("Import") || ui.isReturnDown) {
+				if (ui.button(tr("Import")) || ui.isReturnDown) {
 					UIBox.show = false;
 					App.redrawUI();
 					ImportMesh.run(path);
 				}
 			}
 		});
+		UIBox.clickToHide = false; // Prevent closing when going back to window from file browser
 	}
 
 	public static function reimportMesh() {
@@ -282,36 +404,13 @@ class Project {
 			ImportAsset.run(path);
 		});
 	}
-}
 
-typedef TProjectFormat = {
-	public var version: String;
-	@:optional public var brush_nodes: Array<TNodeCanvas>;
-	@:optional public var material_nodes: Array<TNodeCanvas>;
-	@:optional public var assets: Array<String>; // texture_assets
-	@:optional public var layer_datas: Array<TLayerData>;
-	@:optional public var mesh_datas: Array<TMeshData>;
-	@:optional public var mesh_assets: Array<String>;
-}
-
-typedef TLayerData = {
-	public var res: Int; // Width pixels
-	public var bpp: Int; // Bits per pixel
-	public var texpaint: haxe.io.Bytes;
-	public var texpaint_nor: haxe.io.Bytes;
-	public var texpaint_pack: haxe.io.Bytes;
-	public var texpaint_mask: haxe.io.Bytes;
-	public var uv_scale: Float;
-	public var uv_rot: Float;
-	public var uv_type: Int;
-	public var opacity_mask: Float;
-	public var material_mask: Int;
-	public var object_mask: Int;
-	public var blending: Int;
-}
-
-typedef TAsset = {
-	public var id: Int;
-	public var name: String;
-	public var file: String;
+	public static function reimportTextures() {
+		for (asset in Project.assets) {
+			Data.deleteImage(asset.file);
+			Data.getImage(asset.file, function(image: kha.Image) {
+				Project.assetMap.set(asset.id, image);
+			});
+		}
+	}
 }

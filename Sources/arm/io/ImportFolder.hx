@@ -3,7 +3,8 @@ package arm.io;
 import zui.Nodes;
 import iron.data.Data;
 import iron.data.MaterialData;
-import arm.ui.UITrait;
+import arm.ui.UIHeader;
+import arm.ui.UISidebar;
 import arm.util.RenderUtil;
 import arm.util.MaterialUtil;
 import arm.sys.Path;
@@ -11,8 +12,7 @@ import arm.sys.File;
 import arm.node.NodesMaterial;
 import arm.node.MaterialParser;
 import arm.data.MaterialSlot;
-import arm.Tool;
-using StringTools;
+import arm.Enums;
 
 class ImportFolder {
 
@@ -34,31 +34,31 @@ class ImportFolder {
 
 			var base = f.substr(0, f.lastIndexOf(".")).toLowerCase();
 			var valid = false;
-			if (mapbase == "" && Path.isBaseTex(base)) {
+			if (mapbase == "" && Path.isBaseColorTex(base)) {
 				mapbase = f;
 				valid = true;
 			}
-			if (mapopac == "" && Path.isOpacTex(base)) {
+			if (mapopac == "" && Path.isOpacityTex(base)) {
 				mapopac = f;
 				valid = true;
 			}
-			if (mapnor == "" && Path.isNorTex(base)) {
+			if (mapnor == "" && Path.isNormalMapTex(base)) {
 				mapnor = f;
 				valid = true;
 			}
-			if (mapocc == "" && Path.isOccTex(base)) {
+			if (mapocc == "" && Path.isOcclusionTex(base)) {
 				mapocc = f;
 				valid = true;
 			}
-			if (maprough == "" && Path.isRoughTex(base)) {
+			if (maprough == "" && Path.isRoughnessTex(base)) {
 				maprough = f;
 				valid = true;
 			}
-			if (mapmet == "" && Path.isMetTex(base)) {
+			if (mapmet == "" && Path.isMetallicTex(base)) {
 				mapmet = f;
 				valid = true;
 			}
-			if (mapheight == "" && Path.isDispTex(base)) {
+			if (mapheight == "" && Path.isDisplacementTex(base)) {
 				mapheight = f;
 				valid = true;
 			}
@@ -67,7 +67,7 @@ class ImportFolder {
 		}
 
 		// Create material
-		var isScene = UITrait.inst.worktab.position == SpaceScene;
+		var isScene = UIHeader.inst.worktab.position == SpaceRender;
 		if (isScene) {
 			MaterialUtil.removeMaterialCache();
 			Data.getMaterial("Scene", "Material2", function(md: MaterialData) {
@@ -81,7 +81,7 @@ class ImportFolder {
 		}
 		var nodes = isScene ? Context.materialScene.nodes : Context.material.nodes;
 		var canvas = isScene ? Context.materialScene.canvas : Context.material.canvas;
-		var dirs = path.replace("\\", "/").split("/");
+		var dirs = path.split(Path.sep);
 		canvas.name = dirs[dirs.length - 1];
 		var nout: TNode = null;
 		for (n in canvas.nodes) if (n.type == "OUTPUT_MATERIAL_PBR") { nout = n; break; }
@@ -122,7 +122,7 @@ class ImportFolder {
 
 		MaterialParser.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
-		UITrait.inst.hwnd1.redraws = 2;
+		UISidebar.inst.hwnd1.redraws = 2;
 	}
 
 	static function placeImageNode(nodes: Nodes, canvas: TNodeCanvas, asset: String, ny: Int, to_id: Int, to_socket: Int) {

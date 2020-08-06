@@ -4,14 +4,13 @@ import iron.system.Input;
 import iron.system.Time;
 import iron.math.Vec4;
 import iron.math.Mat4;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 import arm.util.ViewportUtil;
 
 class Camera {
 
 	public static var inst: Camera;
 	public static var dist = 0.0;
-	static inline var speed = 2.0;
 	public var views: Array<Mat4>;
 	var redraws = 0;
 	var first = true;
@@ -27,11 +26,13 @@ class Camera {
 
 		iron.App.notifyOnUpdate(function() {
 			if (Input.occupied ||
-				!App.uienabled ||
+				!App.uiEnabled ||
 				App.isDragging  ||
-				UITrait.inst.isScrolling ||
+				UISidebar.inst.isScrolling ||
 				mouse.viewX < 0 ||
-				mouse.viewX > iron.App.w()) {
+				mouse.viewX > iron.App.w() ||
+				mouse.viewY < 0 ||
+				mouse.viewY > iron.App.h()) {
 				return;
 			}
 
@@ -43,9 +44,9 @@ class Camera {
 			}
 
 			var modif = kb.down("alt") || kb.down("shift") || kb.down("control") || Config.keymap.action_rotate == "middle";
-			var controls = UITrait.inst.cameraControls;
+			var controls = Context.cameraControls;
 			if (controls == ControlsOrbit) {
-				if (Operator.shortcut(Config.keymap.action_rotate) || (mouse.down("right") && !modif)) {
+				if (Operator.shortcut(Config.keymap.action_rotate, ShortcutDown) || (mouse.down("right") && !modif)) {
 					redraws = 2;
 					camera.transform.move(camera.lookWorld(), dist);
 					camera.transform.rotate(new iron.math.Vec4(0, 0, 1), -mouse.movementX / 100);
@@ -58,21 +59,23 @@ class Camera {
 
 				panAction(modif);
 
-				if (Operator.shortcut(Config.keymap.action_zoom)) {
+				if (Operator.shortcut(Config.keymap.action_zoom, ShortcutDown)) {
 					redraws = 2;
 					var f = -mouse.movementY / 150;
+					f *= Config.raw.camera_speed;
 					camera.transform.move(camera.look(), f);
 					dist -= f;
 				}
 
-				if (mouse.wheelDelta != 0) {
+				if (mouse.wheelDelta != 0 && !modif) {
 					redraws = 2;
 					var f = mouse.wheelDelta * (-0.1);
+					f *= Config.raw.camera_speed;
 					camera.transform.move(camera.look(), f);
 					dist -= f;
 				}
 
-				if (Operator.shortcut(Config.keymap.action_rotate_light)) {
+				if (Operator.shortcut(Config.keymap.rotate_light, ShortcutDown)) {
 					redraws = 2;
 					var light = iron.Scene.active.lights[0];
 					var m = iron.math.Mat4.identity();
@@ -80,9 +83,14 @@ class Camera {
 					light.transform.local.multmat(m);
 					light.transform.decompose();
 				}
+
+				if (Operator.shortcut(Config.keymap.rotate_envmap, ShortcutDown)) {
+					redraws = 2;
+					Context.envmapAngle -= mouse.movementX / 100;
+				}
 			}
 			else if (controls == ControlsRotate) {
-				if (Operator.shortcut(Config.keymap.action_rotate) || (mouse.down("right") && !modif)) {
+				if (Operator.shortcut(Config.keymap.action_rotate, ShortcutDown) || (mouse.down("right") && !modif)) {
 					redraws = 2;
 					var t = Context.object.transform;
 					var up = t.up().normalize();
@@ -97,14 +105,18 @@ class Camera {
 
 				panAction(modif);
 
-				if (Operator.shortcut(Config.keymap.action_zoom)) {
+				if (Operator.shortcut(Config.keymap.action_zoom, ShortcutDown)) {
 					redraws = 2;
-					camera.transform.move(camera.look(), -mouse.movementY / 150);
+					var f = -mouse.movementY / 150;
+					f *= Config.raw.camera_speed;
+					camera.transform.move(camera.look(), f);
 				}
 
 				if (mouse.wheelDelta != 0) {
 					redraws = 2;
-					camera.transform.move(camera.look(), mouse.wheelDelta * (-0.1));
+					var f = mouse.wheelDelta * (-0.1);
+					f *= Config.raw.camera_speed;
+					camera.transform.move(camera.look(), f);
 				}
 			}
 			else if (controls == ControlsFly && mouse.down("right")) {
@@ -135,11 +147,11 @@ class Camera {
 					if (ease < 0.0) ease = 0.0;
 				}
 
-				var d = Time.delta * speed * fast * ease;
+				var d = Time.delta * fast * ease * 2.0 * Config.raw.camera_speed;
 				if (d > 0.0) {
 					camera.transform.move(dir, d);
-					if (UITrait.inst.cameraType == CameraOrthographic) {
-						ViewportUtil.updateCameraType(UITrait.inst.cameraType);
+					if (Context.cameraType == CameraOrthographic) {
+						ViewportUtil.updateCameraType(Context.cameraType);
 					}
 				}
 
@@ -152,8 +164,8 @@ class Camera {
 				redraws--;
 				Context.ddirty = 2;
 
-				if (UITrait.inst.cameraType == CameraOrthographic) {
-					ViewportUtil.updateCameraType(UITrait.inst.cameraType);
+				if (Context.cameraType == CameraOrthographic) {
+					ViewportUtil.updateCameraType(Context.cameraType);
 				}
 			}
 		});
@@ -168,7 +180,7 @@ class Camera {
 	function panAction(modif: Bool) {
 		var camera = iron.Scene.active.camera;
 		var mouse = Input.getMouse();
-		if (Operator.shortcut(Config.keymap.action_pan) || (mouse.down("middle") && !modif)) {
+		if (Operator.shortcut(Config.keymap.action_pan, ShortcutDown) || (mouse.down("middle") && !modif)) {
 			redraws = 2;
 			var look = camera.transform.look().normalize().mult(mouse.movementY / 150);
 			var right = camera.transform.right().normalize().mult(-mouse.movementX / 150);

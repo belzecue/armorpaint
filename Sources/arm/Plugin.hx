@@ -26,7 +26,7 @@ class Plugin {
 			iron.data.Data.getBlob("plugins/" + plugin, function(blob: kha.Blob) {
 				pluginName = plugin;
 				#if js
-				untyped __js__("(1, eval)({0})", blob.toString());
+				js.Syntax.code("(1, eval)({0})", blob.toString());
 				#end
 				iron.data.Data.deleteBlob("plugins/" + plugin);
 			});
@@ -78,8 +78,10 @@ class ArmBridge {
 	public static var Path = arm.sys.Path;
 	public static var File = arm.sys.File;
 	public static var NodesMaterial = arm.node.NodesMaterial;
+	public static var NodesBrush = arm.node.NodesBrush;
 	public static var Material = arm.node.Material;
-	public static var UITrait = arm.ui.UITrait;
+	public static var Brush = arm.node.Brush;
+	public static var UISidebar = arm.ui.UISidebar;
 	public static var UINodes = arm.ui.UINodes;
 	public static var UIFiles = arm.ui.UIFiles;
 	public static var UIMenu = arm.ui.UIMenu;
@@ -103,7 +105,8 @@ class ZuiBridge {
 class Keep {
 	public static function keep() {
 		var x = iron.system.ArmPack.decode;
-		var x = iron.system.ArmPack.encode;
+		var y = iron.system.ArmPack.encode;
+		return [x, y];
 		#if arm_creator
 		var x = arm.sys.Path.workingDir;
 		var x = arm.sys.File.createDirectory;

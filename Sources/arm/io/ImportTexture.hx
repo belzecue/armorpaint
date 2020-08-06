@@ -2,10 +2,9 @@ package arm.io;
 
 import kha.Image;
 import iron.data.Data;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 import arm.sys.Path;
-import arm.Project;
-using StringTools;
+import arm.ProjectFormat;
 
 class ImportTexture {
 
@@ -15,7 +14,18 @@ class ImportTexture {
 			return;
 		}
 
-		for (a in Project.assets) if (a.file == path) { Log.info(Strings.info0); return; }
+		for (a in Project.assets) {
+			if (a.file == path) {
+				// Set envmap
+				if (path.toLowerCase().endsWith(".hdr")) {
+					Data.getImage(path, function(image: kha.Image) {
+						ImportEnvmap.run(path, image);
+					});
+				}
+				Log.info(Strings.info0);
+				return;
+			}
+		}
 
 		var ext = path.substr(path.lastIndexOf(".") + 1);
 		var importer = Path.textureImporters.get(ext);
@@ -23,19 +33,17 @@ class ImportTexture {
 
 		importer(path, function(image: Image) {
 			Data.cachedImages.set(path, image);
-			var ar = path.split("/");
-			ar = ar[ar.length - 1].split("\\");
+			var ar = path.split(Path.sep);
 			var name = ar[ar.length - 1];
 			var asset: TAsset = {name: name, file: path, id: Project.assetId++};
 			Project.assets.push(asset);
 			if (Context.texture == null) Context.texture = asset;
 			Project.assetNames.push(name);
 			Project.assetMap.set(asset.id, image);
-			UITrait.inst.hwnd2.redraws = 2;
+			UISidebar.inst.hwnd2.redraws = 2;
 
 			// Set envmap
-			if (path.toLowerCase().endsWith(".hdr") &&
-				(image.width == 1024 || image.width == 2048 || image.width == 4096)) {
+			if (path.toLowerCase().endsWith(".hdr")) {
 				ImportEnvmap.run(path, image);
 			}
 		});

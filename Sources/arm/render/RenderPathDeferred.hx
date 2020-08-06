@@ -4,7 +4,7 @@ import kha.System;
 import iron.RenderPath;
 import iron.Scene;
 #if arm_painter
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 #end
 
 class RenderPathDeferred {
@@ -22,6 +22,22 @@ class RenderPathDeferred {
 	public static function init(_path: RenderPath) {
 
 		path = _path;
+
+		#if kha_metal
+		{
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_depth_r8");
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_depth_rgba32");
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_depth_rgba64");
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_r8");
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_rgba32");
+			path.loadShader("clear_pass/clear_pass/clear_pass_color_rgba64");
+			path.loadShader("clear_pass/clear_pass/clear_pass_depth_r8");
+			path.loadShader("clear_pass/clear_pass/clear_pass_depth_rgba32");
+			path.loadShader("clear_pass/clear_pass/clear_pass_depth_rgba64");
+			path.clearShader = "clear_pass/clear_pass/clear_pass";
+		}
+		#end
+
 		path.createDepthBuffer("main", "DEPTH24");
 
 		{
@@ -59,7 +75,9 @@ class RenderPathDeferred {
 			t.height = 0;
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
+			#if kha_opengl
 			t.depth_buffer = "main";
+			#end
 			path.createRenderTarget(t);
 		}
 		{
@@ -67,7 +85,11 @@ class RenderPathDeferred {
 			t.name = "buf";
 			t.width = 0;
 			t.height = 0;
+			#if (kha_direct3d12 || kha_vulkan)
 			t.format = "RGBA64"; // Match raytrace_target format
+			#else
+			t.format = "RGBA32";
+			#end
 			t.scale = Inc.getSuperSampling();
 			path.createRenderTarget(t);
 		}
@@ -110,11 +132,28 @@ class RenderPathDeferred {
 			rt.image = kha.Image.fromBytes(b, t.width, t.height, kha.graphics4.TextureFormat.L8);
 			path.renderTargets.set(t.name, rt);
 		}
+		{
+			var t = new RenderTargetRaw();
+			t.name = "empty_black";
+			t.width = 1;
+			t.height = 1;
+			t.format = "RGBA32";
+			var rt = new RenderTarget(t);
+			var b = haxe.io.Bytes.alloc(4);
+			b.set(0, 0);
+			b.set(1, 0);
+			b.set(2, 0);
+			b.set(3, 0);
+			rt.image = kha.Image.fromBytes(b, t.width, t.height, kha.graphics4.TextureFormat.RGBA32);
+			path.renderTargets.set(t.name, rt);
+		}
 
 		path.loadShader("world_pass/world_pass/world_pass");
 		path.loadShader("deferred_light/deferred_light/deferred_light");
 		path.loadShader("shader_datas/compositor_pass/compositor_pass");
 		path.loadShader("shader_datas/copy_pass/copy_pass");
+		path.loadShader("shader_datas/copy_pass/copyR8_pass");
+		//path.loadShader("shader_datas/copy_pass/copyD32_pass");
 		path.loadShader("shader_datas/smaa_edge_detect/smaa_edge_detect");
 		path.loadShader("shader_datas/smaa_blend_weight/smaa_blend_weight");
 		path.loadShader("shader_datas/smaa_neighborhood_blend/smaa_neighborhood_blend");
@@ -156,7 +195,7 @@ class RenderPathDeferred {
 		RenderPathPreview.init(path);
 		#end
 
-		#if kha_direct3d12
+		#if (kha_direct3d12 || kha_vulkan)
 		RenderPathRaytrace.init(path);
 		#end
 	}
@@ -173,7 +212,7 @@ class RenderPathDeferred {
 		if (Inc.isCached()) return;
 
 		// Match projection matrix jitter
-		var skipTaa = UITrait.inst.splitView;
+		var skipTaa = Context.splitView;
 		if (!skipTaa) {
 			@:privateAccess Scene.active.camera.frame = RenderPathDeferred.taaFrame;
 			@:privateAccess Scene.active.camera.projectionJitter();
@@ -191,8 +230,8 @@ class RenderPathDeferred {
 		RenderPathPaint.draw();
 		#end
 
-		#if kha_direct3d12
-		if (UITrait.inst.viewportMode == ViewPathTrace) {
+		#if (kha_direct3d12 || kha_vulkan)
+		if (Context.viewportMode == ViewPathTrace) {
 			RenderPathRaytrace.draw();
 			return;
 		}
@@ -210,7 +249,7 @@ class RenderPathDeferred {
 
 	public static function drawDeferred() {
 		#if arm_painter
-		var cameraType = UITrait.inst.cameraType;
+		var cameraType = Context.cameraType;
 		var ddirty = Context.ddirty;
 		#else
 		var cameraType = CameraPerspective;
@@ -297,9 +336,6 @@ class RenderPathDeferred {
 		// ---
 		// Deferred light
 		// ---
-		#if (!kha_opengl)
-		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth so we can read it
-		#end
 		path.setTarget("tex");
 		path.bindTarget("_main", "gbufferD");
 		path.bindTarget("gbuffer0", "gbuffer0");
@@ -349,12 +385,16 @@ class RenderPathDeferred {
 		}
 		#end
 
-		#if (!kha_opengl)
-		path.setDepthFrom("tex", "gbuffer0"); // Re-bind depth
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("tex", "gbuffer0"); // Bind depth for world pass
 		#end
 
-		path.setTarget("tex"); // Re-binds depth
+		path.setTarget("tex");
 		path.drawSkydome("world_pass/world_pass/world_pass");
+
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth
+		#end
 
 		if (Config.raw.rp_bloom != false) {
 
@@ -422,11 +462,19 @@ class RenderPathDeferred {
 
 		if (Config.raw.rp_ssr != false) {
 			if (@:privateAccess path.cachedShaderContexts.get("shader_datas/ssr_pass/ssr_pass") == null) {
+				{
+					var t = new RenderTargetRaw();
+					t.name = "bufb";
+					t.width = 0;
+					t.height = 0;
+					t.format = "RGBA64";
+					path.createRenderTarget(t);
+				}
 				path.loadShader("shader_datas/ssr_pass/ssr_pass");
 				path.loadShader("shader_datas/blur_adaptive_pass/blur_adaptive_pass_x");
 				path.loadShader("shader_datas/blur_adaptive_pass/blur_adaptive_pass_y3_blend");
 			}
-			var targeta = "buf";
+			var targeta = "bufb";
 			var targetb = "gbuffer1";
 
 			path.setTarget(targeta);
@@ -527,7 +575,7 @@ class RenderPathDeferred {
 		path.drawShader("shader_datas/smaa_neighborhood_blend/smaa_neighborhood_blend");
 
 		#if arm_painter
-		var skipTaa = UITrait.inst.splitView;
+		var skipTaa = Context.splitView;
 		#else
 		var skipTaa = false;
 		#end
@@ -560,36 +608,45 @@ class RenderPathDeferred {
 
 	public static function drawGbuffer() {
 		path.setTarget("gbuffer0"); // Only clear gbuffer0
+		#if kha_metal
+		path.clearTarget(0x00000000, 1.0);
+		#else
 		path.clearTarget(null, 1.0);
+		#end
 		path.setTarget("gbuffer2");
 		path.clearTarget(0xff000000);
 		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
+		var currentG = path.currentG;
 		#if arm_painter
 		RenderPathPaint.bindLayers();
 		#end
 		path.drawMeshes("mesh");
+		#if arm_painter
+		RenderPathPaint.unbindLayers();
+		#end
+		LineDraw.render(currentG);
 	}
 
 	static function drawSplit() {
-		if (UITrait.inst.splitView) {
+		if (Context.splitView) {
 			if (Context.pdirty > 0) {
 				var cam = Scene.active.camera;
 
-				UITrait.inst.viewIndex = UITrait.inst.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[UITrait.inst.viewIndex]);
+				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
 				cam.buildMatrix();
 				cam.buildProjection();
 
 				drawGbuffer();
 
-				#if kha_direct3d12
-				UITrait.inst.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawDeferred();
+				#if (kha_direct3d12 || kha_vulkan)
+				Context.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawDeferred();
 				#else
 				drawDeferred();
 				#end
 
-				UITrait.inst.viewIndex = UITrait.inst.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[UITrait.inst.viewIndex]);
+				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
 				cam.buildMatrix();
 				cam.buildProjection();
 			}

@@ -2,8 +2,8 @@ package arm.render;
 
 import iron.RenderPath;
 import arm.util.RenderUtil;
-import arm.ui.UITrait;
-import arm.Tool;
+import arm.ui.UIHeader;
+import arm.Enums;
 
 @:access(iron.RenderPath)
 class RenderPathPreview {
@@ -39,7 +39,9 @@ class RenderPathPreview {
 			t.height = RenderUtil.matPreviewSize;
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
+			#if kha_opengl
 			t.depth_buffer = "mmain";
+			#end
 			path.createRenderTarget(t);
 		}
 
@@ -85,20 +87,21 @@ class RenderPathPreview {
 	public static function commandsPreview() {
 		path.setTarget("mgbuffer2");
 		path.clearTarget(0xff000000);
-		path.setTarget("mgbuffer0", ["mgbuffer1", "mgbuffer2"]);
-		#if arm_world
-		path.clearTarget(0xffffffff, 1.0);
+
+		#if (arm_world || kha_metal)
+		var clearColor = 0xffffffff;
 		#else
-		path.clearTarget(null, 1.0);
+		var clearColor: Null<Int> = null;
 		#end
+
+		path.setTarget("mgbuffer0");
+		path.clearTarget(clearColor, 1.0);
+		path.setTarget("mgbuffer0", ["mgbuffer1", "mgbuffer2"]);
 		path.drawMeshes("mesh");
 
 		// ---
 		// Deferred light
 		// ---
-		#if (!kha_opengl && !kha_direct3d12)
-		path.setDepthFrom("mtex", "mgbuffer1"); // Unbind depth so we can read it
-		#end
 		path.setTarget("mtex");
 		path.bindTarget("_mmain", "gbufferD");
 		path.bindTarget("mgbuffer0", "gbuffer0");
@@ -108,8 +111,8 @@ class RenderPathPreview {
 		}
 		path.drawShader("deferred_light/deferred_light/deferred_light");
 
-		#if (!kha_opengl && !kha_direct3d12)
-		path.setDepthFrom("mtex", "mgbuffer0"); // Re-bind depth
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("mtex", "mgbuffer0"); // Bind depth for world pass
 		#end
 
 		path.setTarget("mtex"); // Re-binds depth
@@ -117,8 +120,12 @@ class RenderPathPreview {
 		path.drawSkydome("world_pass/world_pass/world_pass");
 		#end
 
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("mtex", "mgbuffer1"); // Unbind depth
+		#end
+
 		var framebuffer = "texpreview";
-		var selectedMat = UITrait.inst.worktab.position == SpaceScene ? Context.materialScene : Context.material;
+		var selectedMat = UIHeader.inst.worktab.position == SpaceRender ? Context.materialScene : Context.material;
 		RenderPath.active.renderTargets.get("texpreview").image = selectedMat.image;
 		RenderPath.active.renderTargets.get("texpreview_icon").image = selectedMat.imageIcon;
 
@@ -140,16 +147,14 @@ class RenderPathPreview {
 	public static function commandsDecal() {
 		path.setTarget("gbuffer2");
 		path.clearTarget(0xff000000);
-		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
+		path.setTarget("gbuffer0");
 		path.clearTarget(null, 1.0);
+		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
 		path.drawMeshes("mesh");
 
 		// ---
 		// Deferred light
 		// ---
-		#if (!kha_opengl && !kha_direct3d12)
-		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth so we can read it
-		#end
 		path.setTarget("tex");
 		path.bindTarget("_main", "gbufferD");
 		path.bindTarget("gbuffer0", "gbuffer0");
@@ -159,15 +164,19 @@ class RenderPathPreview {
 		}
 		path.drawShader("deferred_light/deferred_light/deferred_light");
 
-		#if (!kha_opengl && !kha_direct3d12)
-		path.setDepthFrom("tex", "gbuffer0"); // Re-bind depth
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("tex", "gbuffer0"); // Bind depth for world pass
 		#end
 
-		path.setTarget("tex"); // Re-binds depth
+		path.setTarget("tex");
 		path.drawSkydome("world_pass/world_pass/world_pass");
 
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth
+		#end
+
 		var framebuffer = "texpreview";
-		RenderPath.active.renderTargets.get("texpreview").image = UITrait.inst.decalImage;
+		RenderPath.active.renderTargets.get("texpreview").image = Context.decalImage;
 
 		path.setTarget(framebuffer);
 

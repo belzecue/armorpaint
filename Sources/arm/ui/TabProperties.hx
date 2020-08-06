@@ -4,14 +4,16 @@ import zui.Id;
 
 class TabProperties {
 
+	static var row4 = [1 / 4, 1 / 4, 1 / 4, 1 / 4];
+
 	public static function draw() {
-		var ui = UITrait.inst.ui;
-		if (ui.tab(UITrait.inst.htab1, "Properties")) {
+		var ui = UISidebar.inst.ui;
+		if (ui.tab(UISidebar.inst.htab1, tr("Properties"))) {
 			if (Context.object != null) {
 
 				var h = Id.handle();
 				h.selected = Context.object.visible;
-				Context.object.visible = ui.check(h, "Visible");
+				Context.object.visible = ui.check(h, tr("Visible"));
 				if (h.changed) Context.ddirty = 2;
 
 				var loc = Context.object.transform.loc;
@@ -21,8 +23,8 @@ class TabProperties {
 				var f = 0.0;
 				ui.changed = false;
 
-				ui.row(UITrait.inst.row4);
-				ui.text("Location");
+				ui.row(row4);
+				ui.text(tr("Location"));
 
 				h = Id.handle();
 				h.text = roundfp(loc.x) + "";
@@ -39,8 +41,8 @@ class TabProperties {
 				f = Std.parseFloat(ui.textInput(h, "Z"));
 				if (h.changed) { loc.z = f; Context.ddirty = 2; }
 
-				ui.row(UITrait.inst.row4);
-				ui.text("Rotation");
+				ui.row(row4);
+				ui.text(tr("Rotation"));
 
 				h = Id.handle();
 				h.text = roundfp(rot.x) + "";
@@ -63,8 +65,8 @@ class TabProperties {
 					Context.object.transform.buildMatrix();
 				}
 
-				ui.row(UITrait.inst.row4);
-				ui.text("Scale");
+				ui.row(row4);
+				ui.text(tr("Scale"));
 
 				h = Id.handle();
 				h.text = roundfp(scale.x) + "";

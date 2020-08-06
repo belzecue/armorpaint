@@ -11,8 +11,8 @@ import arm.node.NodesMaterial;
 import arm.node.NodesBrush;
 import arm.node.MaterialParser;
 import arm.util.RenderUtil;
-import arm.ui.UITrait;
-import arm.Tool;
+import arm.ui.UIHeader;
+import arm.Enums;
 
 @:access(zui.Zui)
 class UINodes {
@@ -43,6 +43,7 @@ class UINodes {
 	var mchanged = false;
 	var mstartedlast = false;
 	var recompileMat = false; // Mat preview
+	var recompileMatFinal = false;
 	var nodeSearchSpawn: TNode = null;
 	var nodeSearchOffset = 0;
 	var nodeSearchLast = "";
@@ -59,7 +60,7 @@ class UINodes {
 		Nodes.onLinkDrag = onLinkDrag;
 
 		var scale = Config.raw.window_scale;
-		ui = new Zui({font: App.font, theme: App.theme, color_wheel: App.color_wheel, scaleFactor: scale});
+		ui = new Zui({font: App.font, theme: App.theme, color_wheel: App.colorWheel, scaleFactor: scale});
 		ui.scrollEnabled = false;
 	}
 
@@ -87,12 +88,12 @@ class UINodes {
 	}
 
 	public function getCanvasMaterial(): TNodeCanvas {
-		var isScene = UITrait.inst.worktab.position == SpaceScene;
+		var isScene = UIHeader.inst.worktab.position == SpaceRender;
 		return isScene ? Context.materialScene.canvas : Context.material.canvas;
 	}
 
 	public function getNodes(): Nodes {
-		var isScene = UITrait.inst.worktab.position == SpaceScene;
+		var isScene = UIHeader.inst.worktab.position == SpaceRender;
 		if (canvasType == CanvasMaterial) return isScene ? Context.materialScene.nodes : Context.material.nodes;
 		else return Context.brush.nodes;
 	}
@@ -106,32 +107,29 @@ class UINodes {
 		if (ui.changed) {
 			mchanged = true;
 			if (!mdown) changed = true;
-			if (canvasType == CanvasBrush) MaterialParser.parseBrush();
 		}
 		if ((mreleased && mchanged) || changed) {
 			mchanged = changed = false;
-			if (canvasType == CanvasMaterial) {
-				canvasChanged();
-			}
+			canvasChanged();
 			if (mreleased) {
-				UITrait.inst.hwnd.redraws = 2;
+				UISidebar.inst.hwnd.redraws = 2;
 				History.editNodes(lastCanvas, canvasType);
 			}
 		}
-		else if (ui.changed && (mstartedlast || mouse.moved)) {
+		else if (ui.changed && (mstartedlast || mouse.moved) && Config.raw.material_live) {
 			recompileMat = true; // Instant preview
 		}
 		mstartedlast = mouse.started();
 
 		if (!show) return;
-		if (!App.uienabled) return;
+		if (!App.uiEnabled) return;
 		var kb = Input.getKeyboard();
 
 		if (defaultWindowW == 0) defaultWindowW = Std.int(iron.App.w() / 2);
 		if (defaultWindowH == 0) defaultWindowH = Std.int(iron.App.h() / 2);
 
-		wx = Std.int(iron.App.w()) + UITrait.inst.toolbarw;
-		wy = UITrait.inst.headerh * 2;
+		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
+		wy = UIHeader.inst.headerh * 2;
 		if (UIView2D.inst.show) {
 			wy += iron.App.h() - defaultWindowH;
 		}
@@ -167,21 +165,8 @@ class UINodes {
 	}
 
 	public function canvasChanged() {
-		#if (!kha_direct3d12)
-		if (Layers.isFillMaterial()) {
-			Layers.updateFillLayers(); // TODO: only used as jitter
-			UITrait.inst.hwnd.redraws = 2;
-		}
-		#end
-		function _parse(_) {
-			MaterialParser.parsePaintMaterial();
-			RenderUtil.makeMaterialPreview();
-			UITrait.inst.hwnd1.redraws = 2;
-			var decal = Context.tool == ToolDecal || Context.tool == ToolText;
-			if (decal) RenderUtil.makeDecalPreview();
-			iron.App.removeRender(_parse);
-		}
-		iron.App.notifyOnRender(_parse);
+		recompileMat = true;
+		recompileMatFinal = true;
 	}
 
 	function nodeSearch(x = -1, y = -1, done: Void->Void = null) {
@@ -195,12 +180,12 @@ class UINodes {
 			if (first) {
 				first = false;
 				ui.startTextEdit(searchHandle); // Focus search bar
-				ui.textSelectedCurrentText = searchHandle.text;
+				ui.textSelected = searchHandle.text;
 				searchHandle.text = "";
 				nodeSearchLast = "";
 			}
 			var search = searchHandle.text;
-			if (ui.textSelectedCurrentText != "") search = ui.textSelectedCurrentText;
+			if (ui.textSelected != "") search = ui.textSelected;
 
 			if (search != nodeSearchLast) {
 				nodeSearchOffset = 0;
@@ -242,7 +227,7 @@ class UINodes {
 				searchHandle.text = "";
 			}
 			ui.t.BUTTON_COL = BUTTON_COL;
-		}, x, y);
+		}, 0, x, y);
 	}
 
 	public function getNodeX(): Int {
@@ -286,21 +271,36 @@ class UINodes {
 
 	public function render(g: kha.graphics2.Graphics) {
 		if (recompileMat) {
-			recompileMat = false;
-			if (Layers.isFillMaterial()) {
-				Layers.updateFillLayers();
+			if (canvasType == CanvasBrush) {
+				MaterialParser.parseBrush();
+				Context.parseBrushInputs();
+				RenderUtil.makeBrushPreview();
+				UISidebar.inst.hwnd1.redraws = 2;
 			}
 			else {
+				Layers.isFillMaterial() ? Layers.updateFillLayers() : RenderUtil.makeMaterialPreview();
+			}
+
+			UISidebar.inst.hwnd1.redraws = 2;
+			recompileMat = false;
+		}
+		else if (recompileMatFinal) {
+			MaterialParser.parsePaintMaterial();
+			if (Layers.isFillMaterial()) {
 				RenderUtil.makeMaterialPreview();
 			}
-			UITrait.inst.hwnd1.redraws = 2;
+			var decal = Context.tool == ToolDecal || Context.tool == ToolText;
+			if (decal) RenderUtil.makeDecalPreview();
+
+			UISidebar.inst.hwnd.redraws = 2;
+			recompileMatFinal = false;
 		}
 
 		if (!show) return;
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
 
-		if (!App.uienabled && ui.inputRegistered) ui.unregisterInput();
-		if (App.uienabled && !ui.inputRegistered) ui.registerInput();
+		if (!App.uiEnabled && ui.inputRegistered) ui.unregisterInput();
+		if (App.uiEnabled && !ui.inputRegistered) ui.registerInput();
 
 		if (ui.inputStarted) {
 			lastCanvas = Json.parse(Json.stringify(getCanvas()));
@@ -315,13 +315,13 @@ class UINodes {
 
 		// Make window
 		ww = defaultWindowW;
-		wx = Std.int(iron.App.w()) + UITrait.inst.toolbarw;
-		wy = UITrait.inst.headerh * 2;
+		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
+		wy = UIHeader.inst.headerh * 2;
 		var ew = Std.int(ui.ELEMENT_W() * 0.7);
 		wh = iron.App.h();
 		if (UIView2D.inst.show) {
 			wh = defaultWindowH;
-			wy = iron.App.h() - defaultWindowH + UITrait.inst.headerh * 2;
+			wy = iron.App.h() - defaultWindowH + UIHeader.inst.headerh * 2;
 		}
 		if (ui.window(hwnd, wx, wy, ww, wh)) {
 
@@ -341,7 +341,7 @@ class UINodes {
 				if (sel.type == "TEX_IMAGE") {
 					var id = sel.buttons[0].default_value;
 					if (id < Project.assets.length) {
-						img = UITrait.inst.getImage(Project.assets[id]);
+						img = UISidebar.inst.getImage(Project.assets[id]);
 					}
 				}
 				else if (sel.type == "LAYER") {
@@ -368,7 +368,7 @@ class UINodes {
 					var tx = ww - tw - 8 * ui.SCALE();
 					var ty = wh - th - 40 * ui.SCALE();
 
-					#if (kha_opengl || kha_webgl)
+					#if kha_opengl
 					var invertY = sel.type == "MATERIAL";
 					#else
 					var invertY = false;
@@ -414,7 +414,7 @@ class UINodes {
 
 			var cats = canvasType == CanvasMaterial ? NodesMaterial.categories : NodesBrush.categories;
 			for (i in 0...cats.length) {
-				if ((ui.button(cats[i], Left) && UITrait.inst.ui.comboSelectedHandle == null) || (ui.isHovered && drawMenu)) {
+				if ((ui.button(cats[i], Left) && UISidebar.inst.ui.comboSelectedHandle == null) || (ui.isHovered && drawMenu)) {
 					addNodeButton = true;
 					menuCategory = i;
 					popupX = wx + ui._x;
@@ -428,8 +428,8 @@ class UINodes {
 			ui._x += ew + 3;
 			ui._y = 0;
 
-			if (ui.button("Search", Left)) nodeSearch(Std.int(ui._windowX + ui._x), Std.int(ui._windowY + ui._y));
-			if (ui.isHovered) ui.tooltip("Search for nodes (" + Config.keymap.node_search + ")");
+			if (ui.button(tr("Search"), Left)) nodeSearch(Std.int(ui._windowX + ui._x), Std.int(ui._windowY + ui._y));
+			if (ui.isHovered) ui.tooltip(tr("Search for nodes") + ' (${Config.keymap.node_search})');
 
 			ui.t.BUTTON_COL = BUTTON_COL;
 		}
@@ -440,7 +440,6 @@ class UINodes {
 
 		if (drawMenu) {
 			var list = canvasType == CanvasMaterial ? NodesMaterial.list : NodesBrush.list;
-			var canvas = canvasType == CanvasMaterial ? Context.material.canvas : Context.brush.canvas;
 			var numNodes = list[menuCategory].length;
 
 			var ph = numNodes * ui.t.ELEMENT_H * ui.SCALE();
@@ -457,6 +456,7 @@ class UINodes {
 
 			for (n in list[menuCategory]) {
 				if (ui.button("      " + n.name, Left)) {
+					var canvas = getCanvas();
 					var nodes = getNodes();
 					var node = makeNode(n, nodes, canvas);
 					canvas.nodes.push(node);

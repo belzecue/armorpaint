@@ -15,7 +15,24 @@ class NodesBrush {
 				x: 0,
 				y: 0,
 				color: 0xff4982a0,
-				inputs: [],
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: "Lazy Radius",
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: "Lazy Step",
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					}
+				],
 				outputs: [
 					{
 						id: 0,
@@ -42,7 +59,7 @@ class NodesBrush {
 			// 			name: "Position",
 			// 			type: "VECTOR",
 			// 			color: 0xff63c763,
-			// 			default_value: [0.0, 0.0, 0.0]
+			// 			default_value: f32([0.0, 0.0, 0.0])
 			// 		},
 			// 		{
 			// 			id: 0,
@@ -51,6 +68,22 @@ class NodesBrush {
 			// 			type: "VALUE",
 			// 			color: 0xffa1a1a1,
 			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: "Scale",
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: "Angle",
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 0.0
 			// 		},
 			// 		{
 			// 			id: 0,
@@ -71,14 +104,21 @@ class NodesBrush {
 			// 		{
 			// 			id: 0,
 			// 			node_id: 0,
-			// 			name: "UV Scale",
+			// 			name: "Stencil",
 			// 			type: "VALUE",
 			// 			color: 0xffa1a1a1,
 			// 			default_value: 1.0
 			// 		}
 			// 	],
 			// 	outputs: [],
-			// 	buttons: []
+			// 	buttons: [
+			//		{
+			//			name: "Directional",
+			//			type: "BOOL",
+			//			default_value: false,
+			//			output: 0
+			//		}
+			// ]
 			// },
 			{
 				id: 0,
@@ -97,6 +137,43 @@ class NodesBrush {
 						default_value: 0.5,
 						min: 0.0,
 						max: 10.0
+					}
+				],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: "Value",
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.5
+					}
+				],
+				buttons: []
+			},
+			{
+				id: 0,
+				name: "Random",
+				type: "RandomNode",
+				x: 0,
+				y: 0,
+				color: 0xffb34f5a,
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: "Min",
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: "Max",
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 1.0
 					}
 				],
 				outputs: [
@@ -151,7 +228,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					}
 				],
 				buttons: []
@@ -170,7 +247,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					}
 				],
 				outputs: [
@@ -215,7 +292,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					},
 					{
 						id: 0,
@@ -223,7 +300,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					}
 				],
 				outputs: [
@@ -233,7 +310,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					},
 					{
 						id: 0,
@@ -355,7 +432,7 @@ class NodesBrush {
 						name: "Vector",
 						type: "VECTOR",
 						color: 0xff6363c7,
-						default_value: [0.0, 0.0, 0.0]
+						default_value: f32([0.0, 0.0, 0.0])
 					}
 				],
 				outputs: [
@@ -365,7 +442,7 @@ class NodesBrush {
 						name: "Color",
 						type: "RGBA",
 						color: 0xffc7c729,
-						default_value: [0.0, 0.0, 0.0, 1.0]
+						default_value: f32([0.0, 0.0, 0.0, 1.0])
 					},
 					{
 						id: 0,
@@ -407,5 +484,11 @@ class NodesBrush {
 			}
 		}
 		return null;
+	}
+
+	static function f32(ar: Array<kha.FastFloat>): kha.arrays.Float32Array {
+		var res = new kha.arrays.Float32Array(ar.length);
+		for (i in 0...ar.length) res[i] = ar[i];
+		return res;
 	}
 }

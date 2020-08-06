@@ -1,10 +1,11 @@
 package arm;
 
 import zui.Nodes;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 import arm.ui.UIView2D;
 import arm.ui.UIFiles;
 import arm.ui.UINodes;
+import arm.ui.UIToolbar;
 import arm.data.LayerSlot;
 import arm.node.MaterialParser;
 
@@ -22,11 +23,11 @@ class History {
 			var active = steps.length - 1 - redos;
 			var step = steps[active];
 
-			if (step.name == "New Layer") {
+			if (step.name == tr("New Layer")) {
 				Context.layer = Project.layers[step.layer];
 				Context.layer.delete();
 			}
-			else if (step.name == "Delete Layer") {
+			else if (step.name == tr("Delete Layer")) {
 				var l = Layers.newLayer(false);
 				Project.layers.insert(step.layer, Project.layers.pop());
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
@@ -42,16 +43,16 @@ class History {
 				l.blending = step.layer_blending;
 				l.objectMask = step.layer_object;
 			}
-			else if (step.name == "Duplicate Layer") {
+			else if (step.name == tr("Duplicate Layer")) {
 				Context.layer = Project.layers[step.layer + 1];
 				Context.layer.delete();
 			}
-			else if (step.name == "Order Layers") {
+			else if (step.name == tr("Order Layers")) {
 				var target = Project.layers[step.prev_order];
 				Project.layers[step.prev_order] = Project.layers[step.layer];
 				Project.layers[step.layer] = target;
 			}
-			else if (step.name == "Merge Layers") {
+			else if (step.name == tr("Merge Layers")) {
 				Context.layer = Project.layers[step.layer];
 				Context.layer.delete();
 
@@ -76,7 +77,7 @@ class History {
 				Context.layer.objectMask = step.layer_object;
 				Context.layersPreviewDirty = true;
 			}
-			else if (step.name == "New Mask") {
+			else if (step.name == tr("New Mask")) {
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
 				var lay = undoLayers[undoI];
 				Context.setLayer(Project.layers[step.layer], true);
@@ -84,7 +85,7 @@ class History {
 				Context.layer.deleteMask();
 				Context.setLayer(Project.layers[step.layer], false);
 			}
-			else if (step.name == "Delete Mask") {
+			else if (step.name == tr("Delete Mask")) {
 				Context.setLayer(Project.layers[step.layer], false);
 				Context.layer.createMask(0, false);
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
@@ -93,7 +94,7 @@ class History {
 				Context.layersPreviewDirty = true;
 				Context.setLayer(Context.layer, true);
 			}
-			else if (step.name == "Apply Mask") {
+			else if (step.name == tr("Apply Mask")) {
 				Context.layer = Project.layers[step.layer];
 				Context.layer.delete();
 
@@ -108,33 +109,33 @@ class History {
 				Context.layersPreviewDirty = true;
 				Context.setLayer(Context.layer, true);
 			}
-			else if (step.name == "To Fill Layer") {
+			else if (step.name == tr("To Fill Layer")) {
 				Context.layer.toPaintLayer();
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
 				var lay = undoLayers[undoI];
 				Context.layer.swap(lay);
 			}
-			else if (step.name == "To Paint Layer") {
+			else if (step.name == tr("To Paint Layer")) {
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
 				var lay = undoLayers[undoI];
 				Context.layer.swap(lay);
 				Context.layer.material_mask = Project.materials[step.material];
 			}
-			else if (step.name == "Layer Opacity") {
+			else if (step.name == tr("Layer Opacity")) {
 				Context.setLayer(Project.layers[step.layer]);
 				var t = Context.layer.maskOpacity;
 				Context.layer.maskOpacity = step.layer_opacity;
 				step.layer_opacity = t;
 				MaterialParser.parseMeshMaterial();
 			}
-			else if (step.name == "Layer Blending") {
+			else if (step.name == tr("Layer Blending")) {
 				Context.setLayer(Project.layers[step.layer]);
 				var t = Context.layer.blending;
 				Context.layer.blending = step.layer_blending;
 				step.layer_blending = t;
 				MaterialParser.parseMeshMaterial();
 			}
-			else if (step.name == "Edit Nodes") {
+			else if (step.name == tr("Edit Nodes")) {
 				swapCanvas(step);
 			}
 			else { // Paint operation
@@ -147,7 +148,7 @@ class History {
 			}
 			undos--;
 			redos++;
-			UITrait.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
 			Context.ddirty = 2;
 			if (UIView2D.inst.show) UIView2D.inst.hwnd.redraws = 2;
 		}
@@ -158,30 +159,30 @@ class History {
 			var active = steps.length - redos;
 			var step = steps[active];
 
-			if (step.name == "New Layer") {
+			if (step.name == tr("New Layer")) {
 				Layers.newLayer();
 				Project.layers.insert(step.layer, Project.layers.pop());
 			}
-			else if (step.name == "Delete Layer") {
+			else if (step.name == tr("Delete Layer")) {
 				Context.layer = Project.layers[step.layer];
 				swapActive();
 				Context.layer.delete();
 			}
-			else if (step.name == "Duplicate Layer") {
+			else if (step.name == tr("Duplicate Layer")) {
 				Context.layer = Project.layers[step.layer];
 				Context.layer = Context.layer.duplicate();
 			}
-			else if (step.name == "Order Layers") {
+			else if (step.name == tr("Order Layers")) {
 				var target = Project.layers[step.prev_order];
 				Project.layers[step.prev_order] = Project.layers[step.layer];
 				Project.layers[step.layer] = target;
 			}
-			else if (step.name == "Merge Layers") {
+			else if (step.name == tr("Merge Layers")) {
 				Context.layer = Project.layers[step.layer + 1];
 				iron.App.notifyOnRender(redoMergeLayers);
 				iron.App.notifyOnRender(Layers.mergeSelectedLayer);
 			}
-			else if (step.name == "New Mask") {
+			else if (step.name == tr("New Mask")) {
 				Context.layer = Project.layers[step.layer];
 				Context.layer.createMask(0, false);
 				Context.setLayer(Project.layers[step.layer], true);
@@ -190,13 +191,13 @@ class History {
 				Context.layerPreviewDirty = true;
 				undoI = (undoI + 1) % Config.raw.undo_steps;
 			}
-			else if (step.name == "Delete Mask") {
+			else if (step.name == tr("Delete Mask")) {
 				Context.layer = Project.layers[step.layer];
 				swapMaskActive();
 				Context.layer.deleteMask();
 				Context.setLayer(Context.layer, false);
 			}
-			else if (step.name == "Apply Mask") {
+			else if (step.name == tr("Apply Mask")) {
 				function makeApply(g: kha.graphics4.Graphics) {
 					g.end();
 					Context.layer = Project.layers[step.layer];
@@ -208,33 +209,33 @@ class History {
 				}
 				iron.App.notifyOnRender(makeApply);
 			}
-			else if (step.name == "To Fill Layer") {
+			else if (step.name == tr("To Fill Layer")) {
 				var lay = undoLayers[undoI];
 				Context.layer.swap(lay);
 				Context.layer.material_mask = Project.materials[step.material];
 				undoI = (undoI + 1) % Config.raw.undo_steps;
 			}
-			else if (step.name == "To Paint Layer") {
+			else if (step.name == tr("To Paint Layer")) {
 				Context.layer.toPaintLayer();
 				var lay = undoLayers[undoI];
 				Context.layer.swap(lay);
 				undoI = (undoI + 1) % Config.raw.undo_steps;
 			}
-			else if (step.name == "Layer Opacity") {
+			else if (step.name == tr("Layer Opacity")) {
 				Context.setLayer(Project.layers[step.layer]);
 				var t = Context.layer.maskOpacity;
 				Context.layer.maskOpacity = step.layer_opacity;
 				step.layer_opacity = t;
 				MaterialParser.parseMeshMaterial();
 			}
-			else if (step.name == "Layer Blending") {
+			else if (step.name == tr("Layer Blending")) {
 				Context.setLayer(Project.layers[step.layer]);
 				var t = Context.layer.blending;
 				Context.layer.blending = step.layer_blending;
 				step.layer_blending = t;
 				MaterialParser.parseMeshMaterial();
 			}
-			else if (step.name == "Edit Nodes") {
+			else if (step.name == tr("Edit Nodes")) {
 				swapCanvas(step);
 			}
 			else { // Paint operation
@@ -247,14 +248,14 @@ class History {
 			}
 			undos++;
 			redos--;
-			UITrait.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd.redraws = 2;
 			Context.ddirty = 2;
 			if (UIView2D.inst.show) UIView2D.inst.hwnd.redraws = 2;
 		}
 	}
 
 	public static function reset() {
-		steps = [{name: "New", layer: 0, object: 0, material: 0, brush: 0, is_mask: false, has_mask: false}];
+		steps = [{name: tr("New"), layer: 0, object: 0, material: 0, brush: 0, is_mask: false, has_mask: false}];
 		undos = 0;
 		redos = 0;
 		undoI = 0;
@@ -265,31 +266,31 @@ class History {
 		copyToUndo(Context.layer.id, undoI, isMask);
 
 		pushUndo = false;
-		push(UITrait.inst.toolNames[Context.tool]);
+		push(tr(UIToolbar.inst.toolNames[Context.tool]));
 	}
 
 	public static function newLayer() {
-		push("New Layer");
+		push(tr("New Layer"));
 	}
 
 	public static function duplicateLayer() {
-		push("Duplicate Layer");
+		push(tr("Duplicate Layer"));
 	}
 
 	public static function deleteLayer() {
 		swapActive();
-		push("Delete Layer");
+		push(tr("Delete Layer"));
 	}
 
 	public static function orderLayers(prevOrder: Int) {
-		var step = push("Order Layers");
+		var step = push(tr("Order Layers"));
 		step.prev_order = prevOrder;
 	}
 
 	public static function mergeLayers(g: kha.graphics4.Graphics) {
 		copyMergingLayers();
 
-		var step = push("Merge Layers");
+		var step = push(tr("Merge Layers"));
 		step.layer -= 1; // Merge down
 		steps.shift(); // Merge consumes 2 steps
 		undos--;
@@ -298,31 +299,31 @@ class History {
 	}
 
 	public static function newMask() {
-		push("New Mask");
+		push(tr("New Mask"));
 	}
 
 	public static function deleteMask() {
 		swapMaskActive();
-		push("Delete Mask");
+		push(tr("Delete Mask"));
 	}
 
 	public static function applyMask() {
 		copyToUndoWithMask();
-		push("Apply Mask");
+		push(tr("Apply Mask"));
 	}
 
 	public static function toFillLayer() {
 		copyToUndo(Context.layer.id, undoI, false);
-		push("To Fill Layer");
+		push(tr("To Fill Layer"));
 	}
 
 	public static function toPaintLayer() {
 		copyToUndo(Context.layer.id, undoI, false);
-		push("To Paint Layer");
+		push(tr("To Paint Layer"));
 	}
 
 	public static function layerOpacity() {
-		push("Layer Opacity");
+		push(tr("Layer Opacity"));
 	}
 
 	// public static function layerObject() {
@@ -330,14 +331,14 @@ class History {
 	// }
 
 	public static function layerBlending() {
-		push("Layer Blending");
+		push(tr("Layer Blending"));
 	}
 
 	// public static function newMaterial() {}
 	// public static function deleteMaterial() {}
 
 	public static function editNodes(canvas: TNodeCanvas, canvas_type: Int) {
-		var step = push("Edit Nodes");
+		var step = push(tr("Edit Nodes"));
 		step.canvas_type = canvas_type;
 		step.canvas = haxe.Json.parse(haxe.Json.stringify(canvas));
 	}
@@ -417,11 +418,11 @@ class History {
 		if (isMask) {
 			path.setTarget("texpaint_mask_undo" + toId);
 			path.bindTarget("texpaint_mask" + fromId, "tex");
-			path.drawShader("shader_datas/copy_pass/copy_pass");
+			path.drawShader("shader_datas/copy_pass/copyR8_pass");
 		}
 		else {
 			path.setTarget("texpaint_undo" + toId, ["texpaint_nor_undo" + toId, "texpaint_pack_undo" + toId]);
-			path.bindTarget((isMask ? "texpaint_mask" : "texpaint") + fromId, "tex0");
+			path.bindTarget("texpaint" + fromId, "tex0");
 			path.bindTarget("texpaint_nor" + fromId, "tex1");
 			path.bindTarget("texpaint_pack" + fromId, "tex2");
 			path.drawShader("shader_datas/copy_mrt3_pass/copy_mrt3_pass");
@@ -443,11 +444,7 @@ class History {
 			Context.brush = Project.brushes[step.brush];
 		}
 
-		function canvasChanged(_) {
-			UINodes.inst.canvasChanged();
-			iron.App.removeRender(canvasChanged);
-		}
-		iron.App.notifyOnRender(canvasChanged);
+		UINodes.inst.canvasChanged();
 		@:privateAccess UINodes.inst.getNodes().handle = new zui.Zui.Handle();
 		UINodes.inst.hwnd.redraws = 2;
 	}

@@ -8,22 +8,32 @@ import iron.object.Object;
 import iron.Scene;
 import iron.RenderPath;
 import arm.render.Inc;
+import arm.render.RenderPathForward;
 import arm.render.RenderPathDeferred;
 import arm.render.Uniforms;
+import arm.util.BuildMacros;
 import arm.Config;
+import arm.Context;
 #if arm_player
-using StringTools;
+import arm.sys.Path;
 #end
 
 class Main {
 
+	public static var version = "0.8";
+	public static var sha = BuildMacros.sha().substr(1, 7);
+	public static var date = BuildMacros.date().split(" ")[0];
+
 	static var tasks: Int;
 
 	public static function main() {
+		// Used to locate external application data folder
+		Krom.setApplicationName("ArmorPaint");
+
 		tasks = 1;
 		tasks++; Config.load(function() { tasks--; start(); });
 		#if arm_physics
-		tasks++; loadPhysics();
+		tasks++; arm.plugin.PhysicsWorld.load();
 		#end
 		tasks--; start();
 	}
@@ -31,8 +41,9 @@ class Main {
 	static function start() {
 		if (tasks > 0) return;
 
-		Config.create();
+		Config.init();
 		var c = Config.raw;
+
 		var windowMode = c.window_mode == 0 ? WindowMode.Windowed : WindowMode.Fullscreen;
 		var windowFeatures = None;
 		if (c.window_resizable) windowFeatures |= FeatureResizable;
@@ -41,8 +52,7 @@ class Main {
 
 		#if arm_player
 		var title = Krom.getArg(0);
-		title = title.replace("\\", "/");
-		var lasti = title.lastIndexOf("/");
+		var lasti = title.lastIndexOf(Path.sep);
 		if (lasti >= 0) title = title.substr(lasti + 1);
 		if (title.endsWith(".exe")) title = title.substr(0, title.length - 4);
 		#else
@@ -61,19 +71,29 @@ class Main {
 			},
 			framebuffer: {
 				samplesPerPixel: 1,
-				verticalSync: c.window_vsync
+				verticalSync: c.window_vsync,
+				frequency: c.window_frequency
 			}
 		};
 
 		System.start(options, function(window: Window) {
+			Krom.setApplicationName("ArmorPaint");
 			iron.App.init(function() {
 				Scene.setActive("Scene", function(o: Object) {
-					Config.init();
 					Uniforms.init();
 					var path = new RenderPath();
 					Inc.init(path);
-					RenderPathDeferred.init(path);
-					path.commands = RenderPathDeferred.commands;
+
+					if (Context.renderMode == RenderForward) {
+						RenderPathDeferred.init(path); // Allocate gbuffer
+						RenderPathForward.init(path);
+						path.commands = RenderPathForward.commands;
+					}
+					else {
+						RenderPathDeferred.init(path);
+						path.commands = RenderPathDeferred.commands;
+					}
+
 					RenderPath.setActive(path);
 					#if arm_player
 					new arm.Player();
@@ -87,21 +107,4 @@ class Main {
 			});
 		});
 	}
-
-	#if arm_physics
-	static function loadPhysics() {
-		var b = haxe.io.Bytes.ofData(Krom.loadBlob("data/ammo.wasm.js"));
-		var print = function(s: String) { trace(s); };
-		var loaded = function() { tasks--; start(); };
-		untyped __js__("(1, eval)({0})", b.toString());
-		var instantiateWasm = function(imports, successCallback) {
-			var wasmbin = Krom.loadBlob("data/ammo.wasm.wasm");
-			var module = new js.lib.webassembly.Module(wasmbin);
-			var inst = new js.lib.webassembly.Instance(module, imports);
-			successCallback(inst);
-			return inst.exports;
-		};
-		untyped __js__("Ammo({print:print, instantiateWasm:instantiateWasm}).then(loaded)");
-	}
-	#end
 }

@@ -35,7 +35,7 @@ vec3 getPosNoEye(const vec3 eyeLook, const vec3 viewRay, const float depth, cons
 	return wposition;
 }
 
-#ifdef HLSL
+#if defined(HLSL) || defined(METAL) || defined(SPIRV)
 vec3 getPos2(const mat4 invVP, const float depth, vec2 coord) {
 	coord.y = 1.0 - coord.y;
 #else
@@ -47,7 +47,7 @@ vec3 getPos2(const mat4 invVP, const float depth, const vec2 coord) {
 	return pos.xyz;
 }
 
-#ifdef HLSL
+#if defined(HLSL) || defined(METAL) || defined(SPIRV)
 vec3 getPosView2(const mat4 invP, const float depth, vec2 coord) {
 	coord.y = 1.0 - coord.y;
 #else
@@ -59,7 +59,7 @@ vec3 getPosView2(const mat4 invP, const float depth, const vec2 coord) {
 	return pos.xyz;
 }
 
-#ifdef HLSL
+#if defined(HLSL) || defined(METAL) || defined(SPIRV)
 vec3 getPos2NoEye(const vec3 eye, const mat4 invVP, const float depth, vec2 coord) {
 	coord.y = 1.0 - coord.y;
 #else
@@ -69,15 +69,6 @@ vec3 getPos2NoEye(const vec3 eye, const mat4 invVP, const float depth, const vec
 	pos = invVP * pos;
 	pos.xyz /= pos.w;
 	return pos.xyz - eye;
-}
-
-float packFloat2(const float f1, const float f2) {
-	// Higher f1 = less precise f2
-	return floor(f1 * 255.0) + min(f2, 1.0 - 1.0 / 100.0);
-}
-
-vec2 unpackFloat2(const float f) {
-	return vec2(floor(f) / 255.0, fract(f));
 }
 
 vec4 encodeRGBM(const vec3 rgb) {

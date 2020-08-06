@@ -1,16 +1,21 @@
 package arm.node;
 
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 import arm.node.MaterialShader;
+import arm.Enums;
 
 class MakeBrush {
 
 	public static function run(vert: MaterialShader, frag: MaterialShader) {
-		if (UITrait.inst.brush3d) {
-			#if (kha_opengl || kha_webgl)
-			frag.write('float depth = textureLod(gbufferD, vec2(inp.x, 1.0 - inp.y), 0.0).r;');
-			#else
+
+		if (Context.tool == ToolDecal || Context.tool == ToolText || Context.tool == ToolParticle) {
+			frag.write('float dist = 0.0;');
+		}
+		else if (Config.raw.brush_3d) {
+			#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 			frag.write('float depth = textureLod(gbufferD, inp.xy, 0.0).r;');
+			#else
+			frag.write('float depth = textureLod(gbufferD, vec2(inp.x, 1.0 - inp.y), 0.0).r;');
 			#end
 
 			frag.add_uniform('mat4 invVP', '_inverseViewProjectionMatrix');
@@ -19,13 +24,13 @@ class MakeBrush {
 			frag.write('winp.xyz /= winp.w;');
 			frag.wposition = true;
 
-			if (UITrait.inst.brushAngleReject || UITrait.inst.xray) {
+			if (Context.brushAngleReject || Context.xray) {
 				frag.add_function(MaterialFunctions.str_octahedronWrap);
 				frag.add_uniform('sampler2D gbuffer0');
-				#if (kha_opengl || kha_webgl)
-				frag.write('vec2 g0 = textureLod(gbuffer0, vec2(inp.x, 1.0 - inp.y), 0.0).rg;');
-				#else
+				#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 				frag.write('vec2 g0 = textureLod(gbuffer0, inp.xy, 0.0).rg;');
+				#else
+				frag.write('vec2 g0 = textureLod(gbuffer0, vec2(inp.x, 1.0 - inp.y), 0.0).rg;');
 				#end
 				frag.write('vec3 wn;');
 				frag.write('wn.z = 1.0 - abs(g0.x) - abs(g0.y);');
@@ -33,18 +38,18 @@ class MakeBrush {
 				frag.write('wn = normalize(wn);');
 				frag.write('float planeDist = dot(wn, winp.xyz - wposition);');
 
-				if (UITrait.inst.brushAngleReject && !UITrait.inst.xray) {
+				if (Context.brushAngleReject && !Context.xray) {
 					frag.write('if (planeDist < -0.01) discard;');
 					frag.n = true;
-					var angle = UITrait.inst.brushAngleRejectDot;
+					var angle = Context.brushAngleRejectDot;
 					frag.write('if (dot(wn, n) < $angle) discard;');
 				}
 			}
 
-			#if (kha_opengl || kha_webgl)
-			frag.write('float depthlast = textureLod(gbufferD, vec2(inplast.x, 1.0 - inplast.y), 0.0).r;');
-			#else
+			#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 			frag.write('float depthlast = textureLod(gbufferD, inplast.xy, 0.0).r;');
+			#else
+			frag.write('float depthlast = textureLod(gbufferD, vec2(inplast.x, 1.0 - inplast.y), 0.0).r;');
 			#end
 
 			frag.write('vec4 winplast = vec4(vec2(inplast.x, 1.0 - inplast.y) * 2.0 - 1.0, depthlast * 2.0 - 1.0, 1.0);');
@@ -52,12 +57,21 @@ class MakeBrush {
 			frag.write('winplast.xyz /= winplast.w;');
 
 			frag.write('vec3 pa = wposition - winp.xyz;');
-			if (UITrait.inst.xray) {
+			if (Context.xray) {
 				frag.write('pa += wn * vec3(planeDist, planeDist, planeDist);');
 			}
 			frag.write('vec3 ba = winplast.xyz - winp.xyz;');
-			frag.write('float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);');
-			frag.write('float dist = length(pa - ba * h);');
+
+			if (Context.brushLazyRadius > 0 && Context.brushLazyStep > 0) {
+				// Sphere
+				frag.write('float dist = distance(wposition, winp.xyz);');
+			}
+			else {
+				// Capsule
+				frag.write('float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);');
+				frag.write('float dist = length(pa - ba * h);');
+			}
+
 			frag.write('if (dist > brushRadius) discard;');
 		}
 		else { // !brush3d
