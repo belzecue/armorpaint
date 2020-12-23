@@ -10,8 +10,8 @@ import arm.format.BlendParser;
 import zui.Nodes;
 import arm.ui.UISidebar;
 import arm.ui.UINodes;
-import arm.node.NodesMaterial;
-import arm.node.MaterialParser;
+import arm.shader.NodesMaterial;
+import arm.node.MakeMaterial;
 import arm.sys.Path;
 import arm.util.RenderUtil;
 import arm.data.MaterialSlot;
@@ -22,7 +22,7 @@ class ImportBlend {
 		Data.getBlob(path, function(b: Blob) {
 			var bl = new BlendParser(b);
 			if (bl.dna == null) {
-				Log.error(Strings.error3);
+				Log.error(Strings.error3());
 				return;
 			}
 
@@ -277,7 +277,7 @@ class ImportBlend {
 		Data.getBlob(path, function(b: Blob) {
 			var bl = new BlendParser(b);
 			if (bl.dna == null) {
-				Log.error(Strings.error3);
+				Log.error(Strings.error3());
 				return;
 			}
 
@@ -492,15 +492,14 @@ class ImportBlend {
 				}
 			}
 
-			function makeMaterialPreview(_) {
+			function _init() {
 				for (m in imported) {
 					Context.setMaterial(m);
-					MaterialParser.parsePaintMaterial();
+					MakeMaterial.parsePaintMaterial();
 					RenderUtil.makeMaterialPreview();
 				}
-				iron.App.removeRender(makeMaterialPreview);
 			}
-			iron.App.notifyOnRender(makeMaterialPreview);
+			iron.App.notifyOnInit(_init);
 
 			UISidebar.inst.hwnd1.redraws = 2;
 			Data.deleteBlob(path);

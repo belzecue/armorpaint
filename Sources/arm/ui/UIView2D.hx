@@ -15,10 +15,11 @@ import arm.util.RenderUtil;
 import arm.render.RenderPathPaint;
 import arm.Enums;
 
-@:access(zui.Zui)
 class UIView2D {
 
 	public static var inst: UIView2D;
+	public static var pipe: PipelineState;
+	public static var channelLocation: ConstantLocation;
 	public var show = false;
 	public var type = View2DLayer;
 	public var wx: Int;
@@ -30,8 +31,6 @@ class UIView2D {
 	public var panX = 0.0;
 	public var panY = 0.0;
 	public var panScale = 1.0;
-	public var pipe: PipelineState;
-	public var channelLocation: ConstantLocation;
 	var texType = TexBase;
 	var uvmapShow = false;
 	var tiledShow = false;
@@ -40,8 +39,8 @@ class UIView2D {
 		inst = this;
 
 		pipe = new PipelineState();
-		pipe.vertexShader = Reflect.field(kha.Shaders, "layer_view_vert");
-		pipe.fragmentShader = Reflect.field(kha.Shaders, "layer_view_frag");
+		pipe.vertexShader = kha.Shaders.getVertex("layer_view.vert");
+		pipe.fragmentShader = kha.Shaders.getFragment("layer_view.frag");
 		var vs = new VertexStructure();
 		vs.add("pos", VertexData.Float3);
 		vs.add("tex", VertexData.Float2);
@@ -58,10 +57,9 @@ class UIView2D {
 		ui.scrollEnabled = false;
 	}
 
+	@:access(zui.Zui)
 	public function render(g: kha.graphics2.Graphics) {
-		if (UINodes.inst.defaultWindowW == 0) UINodes.inst.defaultWindowW = Std.int(iron.App.w() / 2);
-		if (UINodes.inst.defaultWindowH == 0) UINodes.inst.defaultWindowH = Std.int(iron.App.h() / 2);
-		ww = UINodes.inst.defaultWindowW;
+		ww = Config.raw.layout[LayoutNodesW];
 		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
 		wy = UIHeader.inst.headerh * 2;
 
@@ -69,10 +67,6 @@ class UIView2D {
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
 
 		if (Context.pdirty >= 0) hwnd.redraws = 2; // Paint was active
-
-		var tw = iron.App.w() * 0.95 * panScale;
-		var tx = iron.App.w() / 2 - tw / 2 + panX;
-		var ty = iron.App.h() / 2 - tw / 2 + panY;
 
 		g.end();
 
@@ -88,7 +82,7 @@ class UIView2D {
 		ui.begin(g);
 		wh = iron.App.h();
 		if (UINodes.inst.show) {
-			wh -= UINodes.inst.defaultWindowH;
+			wh -= Config.raw.layout[LayoutNodesH];
 		}
 		if (ui.window(hwnd, wx, wy, ww, wh)) {
 
@@ -100,6 +94,10 @@ class UIView2D {
 			var l = Context.layer;
 			var tex: Image = null;
 			var channel = 0;
+
+			var tw = ww * 0.95 * panScale;
+			var tx = ww / 2 - tw / 2 + panX;
+			var ty = iron.App.h() / 2 - tw / 2 + panY;
 
 			if (type == View2DLayer) {
 				var layer = l.getChildren() == null ? l : l.getChildren()[0];
@@ -123,7 +121,7 @@ class UIView2D {
 											  0;
 			}
 			else if (type == View2DAsset) {
-				tex = UISidebar.inst.getImage(Context.texture);
+				tex = Project.getImage(Context.texture);
 			}
 			else { // View2DFont
 				tex = Context.font.image;
@@ -133,6 +131,7 @@ class UIView2D {
 			var th = tw;
 			if (tex != null) {
 				th = tw * (tex.height / tex.width);
+				ty = iron.App.h() / 2 - th / 2 + panY;
 
 				if (type == View2DLayer) {
 					ui.g.pipeline = pipe;
@@ -204,7 +203,7 @@ class UIView2D {
 				Context.font.name = ui.textInput(h, "", Right);
 			}
 
-			if (h.changed) UISidebar.inst.hwnd.redraws = 2;
+			if (h.changed) UISidebar.inst.hwnd0.redraws = 2;
 			ui.t.ACCENT_COL = ACCENT_COL;
 			ui.t.BUTTON_H = BUTTON_H;
 			ui.t.ELEMENT_H = ELEMENT_H;
@@ -267,21 +266,29 @@ class UIView2D {
 			return;
 		}
 
-		if (mouse.down("right") || mouse.down("middle") || (mouse.down("left") && kb.down("ctrl"))) {
+		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
+
+		if (mouse.down("right") || mouse.down("middle") || (mouse.down("left") && kb.down("control") && !decal)) {
 			panX += mouse.movementX;
 			panY += mouse.movementY;
 		}
 		if (mouse.wheelDelta != 0) {
+			var _panX = panX / panScale;
+			var _panY = panY / panScale;
 			panScale -= mouse.wheelDelta / 10;
 			if (panScale < 0.1) panScale = 0.1;
-			if (panScale > 3.0) panScale = 3.0;
+			if (panScale > 6.0) panScale = 6.0;
+			panX = _panX * panScale;
+			panY = _panY * panScale;
 		}
 
+		var decalMask = decal && Operator.shortcut(Config.keymap.decal_mask + "+" + Config.keymap.action_paint, ShortcutDown);
 		var setCloneSource = Context.tool == ToolClone && Operator.shortcut(Config.keymap.set_clone_source + "+" + Config.keymap.action_paint, ShortcutDown);
 
 		if (type == View2DLayer &&
 			(Operator.shortcut(Config.keymap.action_paint, ShortcutDown) ||
 			 Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint, ShortcutDown) ||
+			 decalMask ||
 			 setCloneSource ||
 			 Config.raw.brush_live)) {
 			Context.paint2d = true;

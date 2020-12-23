@@ -29,6 +29,7 @@ class BoxExport {
 
 			tabExportTextures(ui, tr("Export Textures"));
 			tabPresets(ui);
+			tabAtlases(ui);
 
 		}, 500, 310);
 	}
@@ -53,18 +54,19 @@ class BoxExport {
 			ui.row([0.5, 0.5]);
 			ui.combo(App.resHandle, ["128", "256", "512", "1K", "2K", "4K", "8K", "16K"], tr("Resolution"), true);
 			if (App.resHandle.changed) {
-				iron.App.notifyOnRender(Layers.resizeLayers);
+				iron.App.notifyOnInit(Layers.resizeLayers);
 				UVUtil.uvmap = null;
 				UVUtil.uvmapCached = false;
 				UVUtil.trianglemap = null;
 				UVUtil.trianglemapCached = false;
+				UVUtil.dilatemapCached = false;
 				#if (kha_direct3d12 || kha_vulkan)
 				arm.render.RenderPathRaytrace.ready = false;
 				#end
 			}
 			ui.combo(App.bitsHandle, ["8bit", "16bit", "32bit"], tr("Color"), true);
 			if (App.bitsHandle.changed) {
-				iron.App.notifyOnRender(Layers.setLayerBits);
+				iron.App.notifyOnInit(Layers.setLayerBits);
 			}
 
 			ui.row([0.5, 0.5]);
@@ -79,7 +81,9 @@ class BoxExport {
 			ui.enabled = true;
 			ui.row([0.5, 0.5]);
 			ui.enabled = !bakeMaterial;
-			Context.layersExport = ui.combo(Id.handle({position: Context.layersExport}), [tr("Visible"), tr("Selected")], tr("Layers"), true);
+			var layersExportHandle = Id.handle();
+			layersExportHandle.position = Context.layersExport;
+			Context.layersExport = ui.combo(layersExportHandle, [tr("Visible"), tr("Selected"), tr("Per Object"), tr("Per Udim Tile")], tr("Layers"), true);
 			ui.enabled = true;
 			ui.combo(hpreset, files, tr("Preset"), true);
 			if (hpreset.changed) preset = null;
@@ -95,11 +99,10 @@ class BoxExport {
 				var filters = App.bitsHandle.position != Bits8 ? "exr" : Context.formatType == FormatPng ? "png" : "jpg";
 				UIFiles.show(filters, true, function(path: String) {
 					Context.textureExportPath = path;
-					function export(_) {
+					function _init() {
 						ExportTexture.run(path, bakeMaterial);
-						iron.App.removeRender(export);
 					}
-					iron.App.notifyOnRender(export);
+					iron.App.notifyOnInit(_init);
 				});
 			}
 			if (ui.isHovered) ui.tooltip(tr("Export texture files") + ' (${Config.keymap.file_export_textures})');
@@ -143,7 +146,7 @@ class BoxExport {
 						hpreset.position = files.indexOf(filename.substr(0, filename.length - 5)); // Strip .json
 						Log.info("Preset '" + filename + "' imported.");
 					}
-					else Log.error(Strings.error1);
+					else Log.error(Strings.error1());
 				});
 			}
 
@@ -206,6 +209,26 @@ class BoxExport {
 				preset.textures.push({name: "base", channels: ["base_r", "base_g", "base_b", "1.0"]});
 				@:privateAccess hpreset.children = null;
 				savePreset();
+			}
+		}
+	}
+
+	static function tabAtlases(ui: Zui) {
+		if (ui.tab(htab, tr("Atlases"))) {
+			if (Project.atlasObjects == null || Project.atlasObjects.length != Project.paintObjects.length) {
+				Project.atlasObjects = [];
+				Project.atlasNames = [];
+				for (i in 0...Project.paintObjects.length) {
+					Project.atlasObjects.push(0);
+					Project.atlasNames.push(tr("Atlas") + " " + (i + 1));
+				}
+			}
+			for (i in 0...Project.paintObjects.length) {
+				ui.row([1 / 2, 1 / 2]);
+				ui.text(Project.paintObjects[i].name);
+				var hatlas = Id.handle().nest(i);
+				hatlas.position = Project.atlasObjects[i];
+				Project.atlasObjects[i] = ui.combo(hatlas, Project.atlasNames, tr("Atlas"));
 			}
 		}
 	}

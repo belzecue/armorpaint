@@ -3,18 +3,26 @@ package arm.util;
 import kha.Image;
 import kha.Font;
 import kha.graphics4.TextureFormat;
+import kha.graphics4.VertexBuffer;
+import kha.graphics4.IndexBuffer;
+import kha.graphics4.Usage;
+import kha.graphics4.VertexStructure;
+import kha.graphics4.VertexData;
+import zui.Nodes;
 import iron.Scene;
 import iron.RenderPath;
 import iron.object.MeshObject;
 import iron.math.Mat4;
 import iron.math.Vec4;
+import iron.math.Quat;
 import iron.data.MaterialData;
 import iron.data.ShaderData;
 import arm.ui.UIHeader;
+import arm.ui.UINodes;
 import arm.render.RenderPathPreview;
 import arm.render.RenderPathPaint;
 import arm.render.RenderPathDeferred;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.io.ImportFont;
 import arm.Enums;
 
@@ -22,6 +30,8 @@ class RenderUtil {
 
 	public static inline var matPreviewSize = 256;
 	public static inline var decalPreviewSize = 512;
+	static var screenAlignedFullVB: VertexBuffer = null;
+	static var screenAlignedFullIB: IndexBuffer = null;
 
 	public static function makeMaterialPreview() {
 		Context.materialPreview = true;
@@ -52,13 +62,8 @@ class RenderUtil {
 		var savedLight = light.data.raw.strength;
 		var probe = Scene.active.world.probe;
 		var savedProbe = probe.raw.strength;
-		#if arm_world
-		light.data.raw.strength = 1;
-		probe.raw.strength = 1;
-		#else
 		light.data.raw.strength = 1500;
 		probe.raw.strength = 4;
-		#end
 
 		Scene.active.world.envmap = Context.previewEnvmap;
 		// No resize
@@ -67,7 +72,7 @@ class RenderUtil {
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 
-		MaterialParser.parseMeshPreviewMaterial();
+		MakeMaterial.parseMeshPreviewMaterial();
 		var _commands = RenderPath.active.commands;
 		RenderPath.active.commands = RenderPathPreview.commandsPreview;
 		RenderPath.active.renderFrame(RenderPath.active.frameG);
@@ -90,12 +95,12 @@ class RenderUtil {
 		light.data.raw.strength = savedLight;
 		probe.raw.strength = savedProbe;
 		Scene.active.world.envmap = Context.showEnvmap ? Context.savedEnvmap : Context.emptyEnvmap;
-		MaterialParser.parseMeshMaterial();
+		MakeMaterial.parseMeshMaterial();
 		Context.ddirty = 0;
 	}
 
 	public static function makeDecalPreview() {
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
+		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
 
 		if (Context.decalImage == null) {
@@ -130,7 +135,7 @@ class RenderUtil {
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 
-		MaterialParser.parseMeshPreviewMaterial();
+		MakeMaterial.parseMeshPreviewMaterial();
 		var _commands = RenderPath.active.commands;
 		RenderPath.active.commands = RenderPathPreview.commandsDecal;
 		RenderPath.active.renderFrame(RenderPath.active.frameG);
@@ -154,14 +159,14 @@ class RenderUtil {
 		light.visible = true;
 		Scene.active.world.envmap = Context.showEnvmap ? Context.savedEnvmap : Context.emptyEnvmap;
 
-		MaterialParser.parseMeshMaterial();
-		Context.ddirty = 0;
+		MakeMaterial.parseMeshMaterial();
+		Context.ddirty = 1; // Refresh depth for decal paint
 
 		if (current != null) current.begin(false);
 	}
 
 	public static function makeTextPreview() {
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
+		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
 
 		var text = Context.textToolText;
@@ -194,7 +199,7 @@ class RenderUtil {
 	}
 
 	public static function makeFontPreview() {
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
+		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
 
 		var text = "Abg";
@@ -222,7 +227,7 @@ class RenderUtil {
 
 		if (RenderPathPaint.liveLayerLocked) return;
 
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
+		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
 
 		// Prepare layers
@@ -259,7 +264,7 @@ class RenderUtil {
 		// 	if (scons[i].raw.name == "paint") {
 		// 		_si = i;
 		// 		_scon = scons[i];
-		// 		scons[i] = MaterialParser.defaultScon;
+		// 		scons[i] = MakeMaterial.defaultScon;
 		// 		break;
 		// 	}
 		// }
@@ -267,13 +272,15 @@ class RenderUtil {
 		// 	if (mcons[i].raw.name == "paint") {
 		// 		_mi = i;
 		// 		_mcon = mcons[i];
-		// 		mcons[i] = MaterialParser.defaultMcon;
+		// 		mcons[i] = MakeMaterial.defaultMcon;
 		// 		break;
 		// 	}
 		// }
 		var _material = Context.material;
 		Context.material = new arm.data.MaterialSlot();
-		MaterialParser.parsePaintMaterial();
+		var _tool = Context.tool;
+		Context.tool = ToolBrush;
+		MakeMaterial.parsePaintMaterial();
 
 		RenderPathPaint.useLiveLayer(true);
 
@@ -344,7 +351,7 @@ class RenderUtil {
 			Context.paintVec.x = pointsX[i];
 			Context.paintVec.y = pointsY[i];
 			Context.parseBrushInputs();
-			RenderPathPaint.commandsPaint();
+			RenderPathPaint.commandsPaint(false);
 		}
 
 		Context.brushRadius = _brushRadius;
@@ -360,11 +367,11 @@ class RenderUtil {
 		// scons[_si] = _scon;
 		// mcons[_mi] = _mcon;
 		Context.material = _material;
-		function _parse(_) {
-			MaterialParser.parsePaintMaterial();
-			iron.App.removeRender(_parse);
+		Context.tool = _tool;
+		function _init() {
+			MakeMaterial.parsePaintMaterial();
 		}
-		iron.App.notifyOnRender(_parse);
+		iron.App.notifyOnInit(_init);
 
 		// Restore paint mesh
 		planeo.visible = false;
@@ -404,5 +411,79 @@ class RenderUtil {
 		Context.brushBlendDirty = true;
 
 		if (current != null) current.begin(false);
+	}
+
+	static function createScreenAlignedFullData() {
+		// Over-sized triangle
+		var data = [-Std.int(32767 / 3), -Std.int(32767 / 3), 0, 32767, 0, 0, 0, 0, 0, 0, 0, 0,
+					 32767,              -Std.int(32767 / 3), 0, 32767, 0, 0, 0, 0, 0, 0, 0, 0,
+					-Std.int(32767 / 3),  32767,              0, 32767, 0, 0, 0, 0, 0, 0, 0, 0];
+		var indices = [0, 1, 2];
+
+		// Mandatory vertex data names and sizes
+		var structure = new VertexStructure();
+		structure.add("pos", VertexData.Short4Norm);
+		structure.add("nor", VertexData.Short2Norm);
+		structure.add("tex", VertexData.Short2Norm);
+		structure.add("col", VertexData.Short4Norm);
+		screenAlignedFullVB = new VertexBuffer(Std.int(data.length / Std.int(structure.byteSize() / 4)), structure, Usage.StaticUsage);
+		var vertices = screenAlignedFullVB.lockInt16();
+		for (i in 0...vertices.length) vertices.set(i, data[i]);
+		screenAlignedFullVB.unlock();
+
+		screenAlignedFullIB = new IndexBuffer(indices.length, Usage.StaticUsage);
+		var id = screenAlignedFullIB.lock();
+		for (i in 0...id.length) id[i] = indices[i];
+		screenAlignedFullIB.unlock();
+	}
+
+	public static function makeNodePreview(canvas: TNodeCanvas, node: TNode, image: kha.Image) {
+		var res = MakeMaterial.parseNodePreviewMaterial(node);
+		if (res == null || res.scon == null) return;
+
+		var g4 = image.g4;
+		if (screenAlignedFullVB == null) {
+			createScreenAlignedFullData();
+		}
+
+		var _scaleWorld = Context.paintObject.transform.scaleWorld;
+		Context.paintObject.transform.scaleWorld = 3.0;
+		Context.paintObject.transform.buildMatrix();
+
+		g4.begin();
+		g4.setPipeline(res.scon.pipeState);
+		iron.object.Uniforms.setContextConstants(g4, res.scon, [""]);
+		iron.object.Uniforms.setObjectConstants(g4, res.scon, Context.paintObject);
+		iron.object.Uniforms.setMaterialConstants(g4, res.scon, res.mcon);
+		g4.setVertexBuffer(screenAlignedFullVB);
+		g4.setIndexBuffer(screenAlignedFullIB);
+		g4.drawIndexedVertices();
+		g4.end();
+
+		Context.paintObject.transform.scaleWorld = _scaleWorld;
+		Context.paintObject.transform.buildMatrix();
+	}
+
+	public static function pickPositionAndNormal() {
+		Context.pickPosNor = true;
+		Context.pdirty = 1;
+		var _tool = Context.tool;
+		Context.tool = ToolPicker;
+		MakeMaterial.parsePaintMaterial();
+		arm.render.RenderPathPaint.commandsPaint(false);
+		Context.tool = _tool;
+		Context.pickPosNor = false;
+		MakeMaterial.parsePaintMaterial();
+		Context.pdirty = 0;
+	}
+
+	public static function getDecalMat(): Mat4 {
+		RenderUtil.pickPositionAndNormal();
+		var decalMat = Mat4.identity();
+		var loc = new Vec4(Context.posXPicked, Context.posYPicked, Context.posZPicked);
+		var rot = new Quat().fromTo(new Vec4(0.0, 0.0, -1.0), new Vec4(Context.norXPicked, Context.norYPicked, Context.norZPicked));
+		var scale = new Vec4(Context.brushRadius * 0.5, Context.brushRadius * 0.5, Context.brushRadius * 0.5);
+		decalMat.compose(loc, rot, scale);
+		return decalMat;
 	}
 }

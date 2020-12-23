@@ -15,7 +15,7 @@ import arm.util.UVUtil;
 import arm.util.BuildMacros;
 import arm.sys.Path;
 import arm.sys.File;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.io.ImportAsset;
 import arm.render.RenderPathDeferred;
 import arm.render.RenderPathForward;
@@ -33,7 +33,7 @@ class UIMenu {
 	static var changeStarted = false;
 	static var showMenuFirst = true;
 	static var hideMenu = false;
-	static var envmapLoaded = false;
+	static var askToResetLayout = false;
 
 	@:access(zui.Zui)
 	public static function render(g: kha.graphics2.Graphics) {
@@ -53,7 +53,14 @@ class UIMenu {
 			menuCommands(ui);
 		}
 		else {
-			var menuItems = [16, 3, 13, #if (kha_direct3d12 || kha_vulkan) 13 #else 12 #end, 17, 5];
+			var menuItems = [
+				16, // MenuFile
+				4, // MenuEdit
+				#if (krom_windows || krom_linux) 14 #else 13 #end, // MenuViewport
+				#if (kha_direct3d12 || kha_vulkan) 13 #else 12 #end, // MenuMode
+				17, // MenuCamera
+				7 // MenuHelp
+			];
 			var sepw = menuW / ui.SCALE();
 			g.color = ui.t.SEPARATOR_COL;
 			g.fillRect(menuX, menuY, menuW, 28 * menuItems[menuCategory] * ui.SCALE());
@@ -73,7 +80,10 @@ class UIMenu {
 				if (ui.button("      " + tr("Reimport Mesh"), Left, Config.keymap.file_reimport_mesh)) Project.reimportMesh();
 				if (ui.button("      " + tr("Reimport Textures"), Left, Config.keymap.file_reimport_textures)) Project.reimportTextures();
 				ui.fill(0, 0, sepw, 1, ui.t.ACCENT_SELECT_COL);
-				if (ui.button("      " + tr("Export Textures..."), Left, Config.keymap.file_export_textures_as)) BoxExport.showTextures();
+				if (ui.button("      " + tr("Export Textures..."), Left, Config.keymap.file_export_textures_as)) {
+					Context.layersExport = ExportVisible;
+					BoxExport.showTextures();
+				}
 				if (ui.button("      " + tr("Export Mesh..."), Left)) BoxExport.showMesh();
 				if (ui.button("      " + tr("Bake Material..."), Left)) BoxExport.showBakeMaterial();
 				ui.fill(0, 0, sepw, 1, ui.t.ACCENT_SELECT_COL);
@@ -94,6 +104,7 @@ class UIMenu {
 				if (ui.button("      " + tr("Redo {step}", ["step" => stepRedo]), Left, Config.keymap.edit_redo)) History.redo();
 				ui.enabled = true;
 				ui.fill(0, 0, sepw, 1, ui.t.ACCENT_SELECT_COL);
+				if (ui.button("      " + tr("Reset Layout"), Left)) askToResetLayout = true;
 				if (ui.button("      " + tr("Preferences..."), Left, Config.keymap.edit_prefs)) BoxPreferences.show();
 			}
 			else if (menuCategory == MenuViewport) {
@@ -116,6 +127,10 @@ class UIMenu {
 					UISidebar.inst.ui.isHovered = false;
 				}
 
+				if (ui.button("      " + tr("Toggle Fullscreen"), Left, "alt+enter")) {
+					App.toggleFullscreen();
+				}
+
 				ui.changed = false;
 
 				var p = Scene.active.world.probe;
@@ -129,11 +144,7 @@ class UIMenu {
 					var light = Scene.active.lights[0];
 
 					var lhandle = Id.handle();
-					#if arm_world
-					var scale = 1;
-					#else
 					var scale = 1333;
-					#end
 					lhandle.value = light.data.raw.strength / scale;
 					lhandle.value = Std.int(lhandle.value * 100) / 100;
 					ui.row([1 / 8, 7 / 8]); ui.endElement();
@@ -156,14 +167,14 @@ class UIMenu {
 				var cullHandle = Id.handle({selected: Context.cullBackfaces});
 				Context.cullBackfaces = ui.check(cullHandle, " " + tr("Cull Backfaces"));
 				if (cullHandle.changed) {
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
 
 				var filterHandle = Id.handle({selected: Context.textureFilter});
 				Context.textureFilter = ui.check(filterHandle, " " + tr("Filter Textures"));
 				if (filterHandle.changed) {
-					MaterialParser.parsePaintMaterial();
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parsePaintMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
 
 				Context.drawWireframe = ui.check(Context.wireframeHandle, " " + tr("Wireframe"));
@@ -171,11 +182,11 @@ class UIMenu {
 					ui.g.end();
 					UVUtil.cacheUVMap();
 					ui.g.begin(false);
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
 				Context.drawTexels = ui.check(Context.texelsHandle, " " + tr("Texels"));
 				if (Context.texelsHandle.changed) {
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
 
 				var compassHandle = Id.handle({selected: Context.showCompass});
@@ -184,14 +195,7 @@ class UIMenu {
 
 				Context.showEnvmap = ui.check(Context.showEnvmapHandle, " " + tr("Envmap"));
 				if (Context.showEnvmapHandle.changed) {
-					var world = Scene.active.world;
-					if (!envmapLoaded) {
-						// TODO: Unable to share texture for both radiance and envmap - reload image
-						envmapLoaded = true;
-						iron.data.Data.cachedImages.remove("World_radiance.k");
-					}
-					world.loadEnvmap(function(_) {});
-					if (Context.savedEnvmap == null) Context.savedEnvmap = world.envmap;
+					Context.loadEnvmap();
 					Context.ddirty = 2;
 				}
 
@@ -204,19 +208,6 @@ class UIMenu {
 				else {
 					Scene.active.world.envmap = Context.emptyEnvmap;
 				}
-
-				#if arm_creator
-				// ui.check(Id.handle({selected: true}), "Sun");
-				// ui.check(Id.handle({selected: true}), "Clouds");
-				Project.waterPass = ui.check(Id.handle({selected: Project.waterPass}), " " + tr("Water"));
-				// var world = iron.Scene.active.world;
-				// var light = iron.Scene.active.lights[0];
-				// // Sync sun direction
-				// var v = light.look();
-				// world.raw.sun_direction[0] = v.x;
-				// world.raw.sun_direction[1] = v.y;
-				// world.raw.sun_direction[2] = v.z;
-				#end
 
 				if (ui.changed) keepOpen = true;
 			}
@@ -257,7 +248,10 @@ class UIMenu {
 						}
 						RenderPath.active.commands = RenderPathForward.commands;
 					}
-					MaterialParser.parseMeshMaterial();
+					var _workspace = UIHeader.inst.worktab.position;
+					UIHeader.inst.worktab.position = SpacePaint;
+					MakeMaterial.parseMeshMaterial();
+					UIHeader.inst.worktab.position = _workspace;
 				}
 			}
 			else if (menuCategory == MenuCamera) {
@@ -277,7 +271,7 @@ class UIMenu {
 				if (ui.button("      " + tr("Orbit Right"), Left, Config.keymap.view_orbit_right)) { ViewportUtil.orbit(Math.PI / 12, 0); }
 				if (ui.button("      " + tr("Orbit Up"), Left, Config.keymap.view_orbit_up)) { ViewportUtil.orbit(0, -Math.PI / 12); }
 				if (ui.button("      " + tr("Orbit Down"), Left, Config.keymap.view_orbit_down)) { ViewportUtil.orbit(0, Math.PI / 12); }
-				if (ui.button("      " + tr("Orbit Opposite"), Left, Config.keymap.view_orbit_opposite)) { ViewportUtil.orbit(Math.PI, 0); }
+				if (ui.button("      " + tr("Orbit Opposite"), Left, Config.keymap.view_orbit_opposite)) { ViewportUtil.orbitOpposite(); }
 				if (ui.button("      " + tr("Zoom In"), Left, Config.keymap.view_zoom_in)) { ViewportUtil.zoom(0.2); }
 				if (ui.button("      " + tr("Zoom Out"), Left, Config.keymap.view_zoom_out)) { ViewportUtil.zoom(-0.2); }
 				// ui.fill(0, 0, sepw, 1, ui.t.ACCENT_SELECT_COL);
@@ -308,13 +302,21 @@ class UIMenu {
 				if (ui.button("      " + tr("Manual"), Left)) {
 					File.explorer("https://armorpaint.org/manual");
 				}
+				if (ui.button("      " + tr("What's New"), Left)) {
+					File.explorer("https://armorpaint.org/notes");
+				}
 				if (ui.button("      " + tr("Issue Tracker"), Left)) {
 					File.explorer("https://github.com/armory3d/armorpaint/issues");
 				}
 				if (ui.button("      " + tr("Report Bug"), Left)) {
-					var url = "https://github.com/armory3d/armorpaint/issues/new?labels=bug&template=bug_report.md&body=*ArmorPaint%20" + Main.version + "-" + Main.sha + ",%20" + System.systemId + "*";
+					var url = "https://github.com/armory3d/armorpaint/issues/new?labels=bug&template=bug_report.md&body=*ArmorPaint%20" + Main.version + "-" + Main.sha + ",%20" + System.systemId + "*%0A%0A**Issue description:**%0A%0A**Steps to reproduce:**%0A%0A";
 					File.explorer(url);
 				}
+				if (ui.button("      " + tr("Request Feature"), Left)) {
+					var url = "https://github.com/armory3d/armorpaint/issues/new?labels=feature%20request&template=feature_request.md&body=*ArmorPaint%20" + Main.version + "-" + Main.sha + ",%20" + System.systemId + "*%0A%0A**Feature description:**%0A%0A";
+					File.explorer(url);
+				}
+				ui.fill(0, 0, sepw, 1, ui.t.ACCENT_SELECT_COL);
 				if (ui.button("      " + tr("Check for Updates..."), Left)) {
 					// Retrieve latest version number
 					var url = "'https://luboslenco.gitlab.io/armorpaint/index.html'";
@@ -392,6 +394,17 @@ class UIMenu {
 			App.redrawUI();
 			showMenuFirst = true;
 			menuCommands = null;
+		}
+
+		if (askToResetLayout) {
+			askToResetLayout = false;
+			UIMenu.draw(function(ui: Zui) {
+				ui.text(tr("Reset layout?"), Right, ui.t.HIGHLIGHT_COL);
+				if (ui.button(tr("Confirm"), Left)) {
+					Config.initLayout();
+					Config.save();
+				}
+			}, 2);
 		}
 	}
 

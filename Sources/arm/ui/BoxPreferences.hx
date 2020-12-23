@@ -6,7 +6,7 @@ import zui.Id;
 import zui.Zui;
 import iron.data.Data;
 import iron.RenderPath;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.data.LayerSlot;
 import arm.io.ImportPlugin;
 import arm.io.ImportKeymap;
@@ -58,9 +58,13 @@ class BoxPreferences {
 				var hspeed = Id.handle({value: Config.raw.camera_speed});
 				Config.raw.camera_speed = ui.slider(hspeed, tr("Camera Speed"), 0.1, 4.0, true);
 
-				#if (!krom_android && !krom_ios)
-				Config.raw.native_file_browser = ui.check(Id.handle({selected: Config.raw.native_file_browser}), tr("Native File Browser"));
-				#end
+				var zoomDirectionHandle = Id.handle({position: Config.raw.zoom_direction});
+				ui.combo(zoomDirectionHandle, [tr("Vertical"), tr("Vertical Inverted"), tr("Horizontal"), tr("Horizontal Inverted"), tr("Vertical and Horizontal"), tr("Vertical and Horizontal Inverted")], tr("Direction to Zoom"), true);
+				if (zoomDirectionHandle.changed) {
+					Config.raw.zoom_direction = zoomDirectionHandle.position;
+				}
+
+				Config.raw.node_preview = ui.check(Id.handle({selected: Config.raw.node_preview}), tr("Show Node Preview"));
 
 				#if arm_debug
 				Context.cacheDraws = ui.check(Id.handle({selected: Context.cacheDraws}), tr("Cache UI Draws"));
@@ -88,6 +92,7 @@ class BoxPreferences {
 							if (filesPlugin != null) for (f in filesPlugin) Plugin.stop(f);
 							filesPlugin = null;
 							filesKeymap = null;
+							MakeMaterial.parsePaintMaterial();
 						}
 					}, 2);
 				}
@@ -242,11 +247,20 @@ class BoxPreferences {
 					ui.g.begin(false);
 				}
 
-				Context.brushBias = ui.slider(Id.handle({value: Context.brushBias}), tr("Paint Bleed"), 0.0, 2.0, true);
-				if (ui.isHovered) ui.tooltip(tr("Stretch brush strokes on the uv map to prevent seams"));
+				Config.raw.dilate_radius = Std.int(ui.slider(Id.handle({value: Config.raw.dilate_radius}), tr("Dilate Radius"), 0.0, 16.0, true, 1));
+				if (ui.isHovered) ui.tooltip(tr("Dilate painted textures to prevent seams"));
 
-				Context.dilateRadius = ui.slider(Id.handle({value: Context.dilateRadius}), tr("Dilate Radius"), 0.0, 64.0, true, 1);
-				if (ui.isHovered) ui.tooltip(tr("Dilate baked textures to prevent seams"));
+				var dilateHandle = Id.handle({position: Config.raw.dilate});
+				ui.combo(dilateHandle, [tr("Instant"), tr("Delayed")], tr("Dilate"), true);
+				if (dilateHandle.changed) {
+					Config.raw.dilate = dilateHandle.position;
+				}
+
+				var workspaceHandle = Id.handle({position: Config.raw.workspace});
+				ui.combo(workspaceHandle, [tr("Paint"), tr("Material"), tr("Bake")], tr("Default Workspace"), true);
+				if (workspaceHandle.changed) {
+					Config.raw.workspace = workspaceHandle.position;
+				}
 
 				var materialLiveHandle = Id.handle({selected: Config.raw.material_live});
 				Config.raw.material_live = ui.check(materialLiveHandle, tr("Live Material Preview"));
@@ -259,24 +273,24 @@ class BoxPreferences {
 
 				var brush3dHandle = Id.handle({selected: Config.raw.brush_3d});
 				Config.raw.brush_3d = ui.check(brush3dHandle, tr("3D Cursor"));
-				if (brush3dHandle.changed) MaterialParser.parsePaintMaterial();
+				if (brush3dHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.enabled = Config.raw.brush_3d;
 				var brushDepthRejectHandle = Id.handle({selected: Context.brushDepthReject});
 				Context.brushDepthReject = ui.check(brushDepthRejectHandle, tr("Depth Reject"));
-				if (brushDepthRejectHandle.changed) MaterialParser.parsePaintMaterial();
+				if (brushDepthRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.row([0.5, 0.5]);
 
 				var brushAngleRejectHandle = Id.handle({selected: Context.brushAngleReject});
 				Context.brushAngleReject = ui.check(brushAngleRejectHandle, tr("Angle Reject"));
-				if (brushAngleRejectHandle.changed) MaterialParser.parsePaintMaterial();
+				if (brushAngleRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				if (!Context.brushAngleReject) ui.enabled = false;
 				var angleDotHandle = Id.handle({value: Context.brushAngleRejectDot});
 				Context.brushAngleRejectDot = ui.slider(angleDotHandle, tr("Angle"), 0.0, 1.0, true);
 				if (angleDotHandle.changed) {
-					MaterialParser.parsePaintMaterial();
+					MakeMaterial.parsePaintMaterial();
 				}
 				ui.enabled = true;
 			}
@@ -302,6 +316,18 @@ class BoxPreferences {
 			Context.hsupersample = Id.handle({position: Config.getSuperSampleQuality(Config.raw.rp_supersample)});
 			Context.hvxao = Id.handle({selected: Config.raw.rp_gi});
 			if (ui.tab(htab, tr("Viewport"), true)) {
+				#if (!arm_vr)
+
+				#if (kha_direct3d12 || kha_vulkan)
+
+				var hpathtracemode = Id.handle({position: Context.pathTraceMode});
+				Context.pathTraceMode = ui.combo(hpathtracemode, [tr("Core"), tr("Full")], tr("Path Tracer"), true);
+				if (hpathtracemode.changed) {
+					arm.render.RenderPathRaytrace.ready = false;
+				}
+
+				#else
+
 				var hrendermode = Id.handle({position: Context.renderMode});
 				Context.renderMode = ui.combo(hrendermode, [tr("Full"), tr("Mobile")], tr("Renderer"), true);
 				if (hrendermode.changed) {
@@ -314,8 +340,12 @@ class BoxPreferences {
 					else {
 						RenderPath.active.commands = RenderPathDeferred.commands;
 					}
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
+
+				#end
+
+				#end
 
 				ui.combo(Context.hsupersample, ["0.25x", "0.5x", "1.0x", "1.5x", "2.0x", "4.0x"], tr("Super Sample"), true);
 				if (Context.hsupersample.changed) Config.applyConfig();
@@ -331,9 +361,6 @@ class BoxPreferences {
 					if (ui.isHovered) ui.tooltip(tr("Cone-traced AO and shadows"));
 					if (Context.hvxao.changed) {
 						Config.applyConfig();
-						#if arm_creator
-						MaterialParser.parseMeshMaterial();
-						#end
 					}
 
 					ui.enabled = Context.hvxao.selected;
@@ -377,17 +404,8 @@ class BoxPreferences {
 				Config.raw.displace_strength = ui.slider(dispHandle, tr("Displacement Strength"), 0.0, 10.0, true);
 				if (dispHandle.changed) {
 					Context.ddirty = 2;
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
-
-				#if arm_creator
-				var h = Id.handle({value: Context.vxaoExt});
-				Context.vxaoExt = ui.slider(h, tr("VXAO Ext"), 1.0, 10.0);
-				if (h.changed) {
-					Context.ddirty = 2;
-					MaterialParser.parseMeshMaterial();
-				}
-				#end
 			}
 			if (ui.tab(htab, tr("Keymap"), true)) {
 
@@ -560,10 +578,10 @@ plugin.drawUI = function(ui) {
 	static function setScale() {
 		var scale = Config.raw.window_scale;
 		UISidebar.inst.ui.setScale(scale);
-		UISidebar.inst.windowW = Std.int(UISidebar.defaultWindowW * scale);
+		Config.raw.layout[LayoutSidebarW] = Std.int(UISidebar.defaultWindowW * scale);
 		UIToolbar.inst.toolbarw = Std.int(UIToolbar.defaultToolbarW * scale);
 		UIHeader.inst.headerh = Std.int(UIHeader.defaultHeaderH * scale);
-		UIStatus.inst.statush = Std.int(UIStatus.defaultStatusH * scale);
+		Config.raw.layout[LayoutStatusH] = Std.int(UIStatus.defaultStatusH * scale);
 		UIMenubar.inst.menubarw = Std.int(UIMenubar.defaultMenubarW * scale);
 		UISidebar.inst.setIconScale();
 		UINodes.inst.ui.setScale(scale);

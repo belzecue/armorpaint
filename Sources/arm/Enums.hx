@@ -23,6 +23,11 @@ package arm;
 	var SpaceRender = 3;
 }
 
+@:enum abstract DilateType(Int) from Int to Int {
+	var DilateInstant = 0;
+	var DilateDelayed = 1;
+}
+
 @:enum abstract BakeType(Int) from Int to Int {
 	var BakeInit = -1;
 	var BakeAO = 0;
@@ -85,6 +90,20 @@ package arm;
 	var RenderForward = 1;
 	var RenderPathTrace = 2;
 }
+
+@:enum abstract ExportMode(Int) from Int to Int {
+	var ExportVisible = 0;
+	var ExportSelected = 1;
+	var ExportPerObject = 2;
+	var ExportPerUdimTile = 3;
+}
+
+#if (kha_direct3d12 || kha_vulkan)
+@:enum abstract PathTraceMode(Int) from Int to Int {
+	var TraceCore = 0;
+	var TraceFull = 1;
+}
+#end
 
 @:enum abstract FillType(Int) from Int to Int {
 	var FillObject = 0;
@@ -207,4 +226,23 @@ package arm;
 	var ModelSphere = 1;
 	var ModelTessellatedPlane = 2;
 	var ModelCustom = 3;
+}
+
+@:enum abstract LayoutSize(Int) from Int to Int {
+	var LayoutSidebarW = 0;
+	var LayoutSidebarH0 = 1;
+	var LayoutSidebarH1 = 2;
+	var LayoutSidebarH2 = 3;
+	var LayoutNodesW = 4;
+	var LayoutNodesH = 5;
+	var LayoutStatusH = 6;
+}
+
+@:enum abstract ZoomDirection(Int) from Int to Int {
+	var ZoomVertical = 0;
+	var ZoomVerticalInverted = 1;
+	var ZoomHorizontal = 2;
+	var ZoomHorizontalInverted = 3;
+	var ZoomVerticalAndHorizontal = 4;
+	var ZoomVerticalAndHorizontalInverted = 5;
 }

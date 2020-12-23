@@ -19,32 +19,50 @@ class BrushOutputNode extends LogicNode {
 		var lastMask = Context.brushMaskImage;
 		var lastStencil = Context.brushStencilImage;
 
-		Context.paintVec = inputs[0].get();
-		Context.brushNodesRadius = inputs[1].get();
-		Context.brushNodesScale = inputs[2].get();
-		Context.brushNodesAngle = inputs[3].get();
+		var input0: Dynamic;
+		var input1: Dynamic;
+		var input2: Dynamic;
+		var input3: Dynamic;
+		var input4: Dynamic;
+		var input5: Dynamic;
+		var input6: Dynamic;
+		try {
+			input0 = inputs[0].get();
+			input1 = inputs[1].get();
+			input2 = inputs[2].get();
+			input3 = inputs[3].get();
+			input4 = inputs[4].get();
+			input5 = inputs[5].get();
+			input6 = inputs[6].get();
+		}
+		catch (_) { return; }
 
-		var opac: Dynamic = inputs[4].get(); // Float or texture name
+		Context.paintVec = input0;
+		Context.brushNodesRadius = input1;
+		Context.brushNodesScale = input2;
+		Context.brushNodesAngle = input3;
+
+		var opac: Dynamic = input4; // Float or texture name
 		if (opac == null) opac = 1.0;
 		if (Std.is(opac, String)) {
 			Context.brushNodesOpacity = 1.0;
 			var index = Project.assetNames.indexOf(opac);
 			var asset = Project.assets[index];
-			Context.brushMaskImage = UISidebar.inst.getImage(asset);
+			Context.brushMaskImage = Project.getImage(asset);
 		}
 		else {
 			Context.brushNodesOpacity = opac;
 			Context.brushMaskImage = null;
 		}
 
-		Context.brushNodesHardness = inputs[5].get();
+		Context.brushNodesHardness = input5;
 
-		var stencil: Dynamic = inputs[6].get(); // Float or texture name
+		var stencil: Dynamic = input6; // Float or texture name
 		if (stencil == null) stencil = 1.0;
 		if (Std.is(stencil, String)) {
 			var index = Project.assetNames.indexOf(stencil);
 			var asset = Project.assets[index];
-			Context.brushStencilImage = UISidebar.inst.getImage(asset);
+			Context.brushStencilImage = Project.getImage(asset);
 		}
 		else {
 			Context.brushStencilImage = null;
@@ -52,7 +70,7 @@ class BrushOutputNode extends LogicNode {
 
 		if (lastMask != Context.brushMaskImage ||
 			lastStencil != Context.brushStencilImage) {
-			MaterialParser.parsePaintMaterial();
+			MakeMaterial.parsePaintMaterial();
 		}
 
 		Context.brushDirectional = Directional;
@@ -60,11 +78,11 @@ class BrushOutputNode extends LogicNode {
 
 	override function run(from: Int) {
 
-		var left = 0;
-		var right = 1;
+		var left = 0.0;
+		var right = 1.0;
 		if (Context.paint2d) {
-			left = 1;
-			right = 2;
+			left = 1.0;
+			right = (Context.splitView ? 2.0 : 1.0) + UIView2D.inst.ww / App.w();
 		}
 
 		// First time init
@@ -74,14 +92,16 @@ class BrushOutputNode extends LogicNode {
 		}
 
 		// Do not paint over fill layer
-		var fillLayer = Context.layer.material_mask != null && Context.tool != ToolPicker && !Context.layerIsMask;
+		var fillLayer = Context.layer.fill_layer != null && Context.tool != ToolPicker && !Context.layerIsMask;
 
 		// Do not paint over groups
 		var groupLayer = Context.layer.getChildren() != null;
 
 		// Paint bounds
-		if (Context.paintVec.x < right && Context.paintVec.x > left &&
-			Context.paintVec.y < 1 && Context.paintVec.y > 0 &&
+		if (Context.paintVec.x > left &&
+			Context.paintVec.x < right &&
+			Context.paintVec.y > 0 &&
+			Context.paintVec.y < 1 &&
 			!UISidebar.inst.ui.isHovered &&
 			!UISidebar.inst.ui.isScrolling &&
 			!fillLayer &&

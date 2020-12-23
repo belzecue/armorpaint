@@ -7,6 +7,8 @@ import iron.system.Time;
 import iron.system.Input;
 import arm.io.ImportAsset;
 import arm.sys.Path;
+import arm.sys.File;
+import arm.Enums;
 
 class TabTextures {
 
@@ -32,7 +34,7 @@ class TabTextures {
 			if (Project.assets.length > 0) {
 
 				var slotw = Std.int(51 * ui.SCALE());
-				var num = Std.int(UISidebar.inst.windowW / slotw);
+				var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
 
 				for (row in 0...Std.int(Math.ceil(Project.assets.length / num))) {
 					ui.row([for (i in 0...num) 1 / num]);
@@ -49,7 +51,7 @@ class TabTextures {
 						}
 
 						var asset = Project.assets[i];
-						var img = UISidebar.inst.getImage(asset);
+						var img = Project.getImage(asset);
 						var uix = ui._x;
 						var uiy = ui._y;
 						var sw = img.height < img.width ? img.height : 0;
@@ -90,25 +92,26 @@ class TabTextures {
 								ui.text(asset.name, Right, ui.t.HIGHLIGHT_COL);
 								if (ui.button(tr("Export"), Left)) {
 									UIFiles.show("png", true, function(path: String) {
-										var target = kha.Image.createRenderTarget(img.width, img.height);
-										function exportTexture(g: kha.graphics4.Graphics) {
+										App.notifyOnNextFrame(function () {
 											if (Layers.pipeMerge == null) Layers.makePipe();
+											var target = kha.Image.createRenderTarget(to_pow2(img.width), to_pow2(img.height));
 											target.g2.begin(false);
 											target.g2.pipeline = Layers.pipeCopy;
-											target.g2.drawImage(img, 0, 0);
+											target.g2.drawScaledImage(img, 0, 0, target.width, target.height);
 											target.g2.pipeline = null;
 											target.g2.end();
-											var f = UIFiles.filename;
-											if (f == "") f = tr("untitled");
-											if (!f.endsWith(".png")) f += ".png";
-											var out = new haxe.io.BytesOutput();
-											var writer = new arm.format.PngWriter(out);
-											var data = arm.format.PngTools.build32RGB1(target.width, target.height, target.getPixels());
-											writer.write(data);
-											Krom.fileSaveBytes(path + Path.sep + f, out.getBytes().getData());
-											iron.App.removeRender(exportTexture);
-										};
-										iron.App.notifyOnRender(exportTexture);
+											App.notifyOnNextFrame(function () {
+												var f = UIFiles.filename;
+												if (f == "") f = tr("untitled");
+												if (!f.endsWith(".png")) f += ".png";
+												var out = new haxe.io.BytesOutput();
+												var writer = new arm.format.PngWriter(out);
+												var data = arm.format.PngTools.build32RGBA(target.width, target.height, target.getPixels());
+												writer.write(data);
+												Krom.fileSaveBytes(path + Path.sep + f, out.getBytes().getData());
+												target.unload();
+											});
+										});
 									});
 								}
 								if (ui.button(tr("Reimport"), Left)) {
@@ -117,12 +120,18 @@ class TabTextures {
 										Project.assetMap.set(asset.id, image);
 										// Set envmap
 										if (asset.file.toLowerCase().endsWith(".hdr")) {
-											var current = @:privateAccess kha.graphics4.Graphics2.current;
-											if (current != null) current.end();
-											arm.io.ImportEnvmap.run(asset.file, image);
-											if (current != null) current.begin(false);
+											App.notifyOnNextFrame(function() { // Make sure file browser process did finish
+												arm.io.ImportEnvmap.run(asset.file, image);
+											});
 										}
+										function _next() {
+											arm.node.MakeMaterial.parsePaintMaterial();
+											arm.util.RenderUtil.makeMaterialPreview();
+											UISidebar.inst.hwnd1.redraws = 2;
+										}
+										App.notifyOnNextFrame(_next);
 									});
+
 								}
 								if (ui.button(tr("To Mask"), Left)) {
 									Layers.createImageMask(asset);
@@ -133,18 +142,20 @@ class TabTextures {
 									Project.assetMap.remove(asset.id);
 									Project.assets.splice(i, 1);
 									Project.assetNames.splice(i, 1);
-									function _parse(g: kha.graphics4.Graphics) {
-										arm.node.MaterialParser.parsePaintMaterial();
+									function _next() {
+										arm.node.MakeMaterial.parsePaintMaterial();
 										arm.util.RenderUtil.makeMaterialPreview();
 										UISidebar.inst.hwnd1.redraws = 2;
-										iron.App.removeRender(_parse);
 									}
-									iron.App.notifyOnRender(_parse);
+									App.notifyOnNextFrame(_next);
 
 									for (m in Project.materials) updateTexturePointers(m.canvas.nodes, i);
 									for (b in Project.brushes) updateTexturePointers(b.canvas.nodes, i);
 								}
-							}, 5);
+								if (ui.button(tr("Open Containing Directory..."), Left)) {
+									File.explorer(asset.file.substr(0, asset.file.lastIndexOf(Path.sep)));
+								}
+							}, 6);
 						}
 					}
 				}
@@ -156,6 +167,17 @@ class TabTextures {
 				if (ui.isHovered) ui.tooltip(tr("Drag and drop files here"));
 			}
 		}
+	}
+
+	static function to_pow2(i: Int): Int {
+		i--;
+		i |= i >> 1;
+		i |= i >> 2;
+		i |= i >> 4;
+		i |= i >> 8;
+		i |= i >> 16;
+		i++;
+		return i;
 	}
 
 	static function updateTexturePointers(nodes: Array<TNode>, i: Int) {

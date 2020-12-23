@@ -1,5 +1,7 @@
 package arm;
 
+import arm.Enums;
+
 @:keep
 class Log {
 
@@ -16,7 +18,7 @@ class Log {
 		if (arm.ui.UIStatus.inst != null) {
 			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
 		}
-		trace(s);
+		consoleTrace(s);
 	}
 
 	public static function error(s: String) {
@@ -26,11 +28,11 @@ class Log {
 		if (arm.ui.UIStatus.inst != null) {
 			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
 		}
-		trace(s);
+		consoleTrace(s);
 	}
 
 	public static function trace(s: String) {
-		trace(s);
+		consoleTrace(s);
 	}
 
 	public static function init() {
@@ -41,7 +43,8 @@ class Log {
 	}
 
 	static function consoleTrace(v: Dynamic, ?inf: haxe.PosInfos) {
-		if (arm.ui.UIStatus.inst != null && arm.ui.UISidebar.inst != null && arm.ui.UISidebar.inst.ui != null && arm.ui.UIStatus.inst.statush > arm.ui.UIStatus.defaultStatusH * arm.ui.UISidebar.inst.ui.SCALE()) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (arm.ui.UIStatus.inst != null && arm.ui.UISidebar.inst != null && arm.ui.UISidebar.inst.ui != null && statush > arm.ui.UIStatus.defaultStatusH * arm.ui.UISidebar.inst.ui.SCALE()) {
 			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
 		}
 		lastTraces.unshift(Std.string(v));

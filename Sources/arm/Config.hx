@@ -4,18 +4,20 @@ import haxe.Json;
 import haxe.io.Bytes;
 import kha.Display;
 import iron.data.Data;
-#if arm_painter
 import arm.ui.UISidebar;
+import arm.ui.UINodes;
+import arm.ui.UIView2D;
+import arm.ui.UIStatus;
 import arm.render.Inc;
 import arm.sys.Path;
 import arm.Enums;
-#end
 import arm.ConfigFormat;
+import arm.KeymapFormat;
 
 class Config {
 
 	public static var raw: TConfig = null;
-	public static var keymap: Dynamic;
+	public static var keymap: TKeymap;
 	public static var configLoaded = false;
 
 	public static function load(done: Void->Void) {
@@ -55,17 +57,14 @@ class Config {
 			raw.window_y = -1;
 			raw.window_scale = 1.0;
 			var disp = Display.primary;
-			if (disp != null && disp.width >= 2560 && disp.height >= 1600) {
+			if (disp.width >= 2560 && disp.height >= 1600) {
 				raw.window_scale = 2.0;
 			}
 			#if (krom_android || krom_ios || krom_darwin)
 			raw.window_scale = 2.0;
 			#end
 			raw.window_vsync = true;
-			raw.window_frequency = 60;
-			if (disp != null) {
-				raw.window_frequency = disp.frequency;
-			}
+			raw.window_frequency = disp.frequency;
 			raw.rp_bloom = false;
 			raw.rp_gi = false;
 			raw.rp_vignette = 0.4;
@@ -81,7 +80,6 @@ class Config {
 			raw.rp_supersample = 0.5;
 			#end
 
-			#if arm_painter
 			raw.version = Main.version;
 			raw.sha = Main.sha;
 			raw.recent_projects = [];
@@ -95,26 +93,21 @@ class Config {
 			raw.pressure_angle = false;
 			raw.pressure_opacity = false;
 			raw.pressure_sensitivity = 1.0;
-			raw.material_live = true;
 			#if kha_vulkan
-			raw.brush_3d = false; // TODO
+			raw.material_live = false;
 			#else
-			raw.brush_3d = true;
+			raw.material_live = true;
 			#end
+			raw.brush_3d = true;
 			raw.brush_live = false;
 			raw.camera_speed = 1.0;
-			raw.displace_strength = 1.0;
-			#if krom_android
-			raw.native_file_browser = false;
-			#else
-			raw.native_file_browser = true;
-			#end
+			raw.zoom_direction = ZoomVertical;
+			raw.displace_strength = 0.0;
 			raw.show_asset_names = false;
-			#end
-
-			#if arm_creator
-			// raw.displace_strength = 100.0;
-			#end
+			raw.node_preview = true;
+			raw.workspace = 0;
+			raw.dilate = DilateInstant;
+			raw.dilate_radius = 2;
 		}
 		else {
 			// Upgrade config format created by older ArmorPaint build
@@ -129,20 +122,19 @@ class Config {
 			}
 		}
 
-		#if arm_painter
 		loadKeymap();
-		#end
 	}
 
 	public static function restore() {
 		zui.Zui.Handle.global = new zui.Zui.Handle(); // Reset ui handles
 		configLoaded = false;
+		var _layout = raw.layout;
 		init();
+		raw.layout = _layout;
+		initLayout();
 		Translator.loadTranslations(raw.locale);
-		#if arm_painter
 		applyConfig();
 		arm.ui.BoxPreferences.loadTheme(raw.theme);
-		#end
 	}
 
 	public static inline function getSuperSampleQuality(f: Float): Int {
@@ -161,7 +153,6 @@ class Config {
 			   i == 4 ? 2.0 : 4.0;
 	}
 
-	#if arm_painter
 	public static function applyConfig() {
 		Config.raw.rp_ssgi = Context.hssgi.selected;
 		Config.raw.rp_ssr = Context.hssr.selected;
@@ -172,7 +163,7 @@ class Config {
 		save();
 		Context.ddirty = 2;
 
-		var current = @:privateAccess kha.graphics4.Graphics2.current;
+		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
 		Inc.applyConfig();
 		if (current != null) current.begin(false);
@@ -232,5 +223,17 @@ class Config {
 			   i == 8192 ? Res8192 :
 			   i == 16384 ? Res16384 : 0;
 	}
-	#end
+
+	public static function initLayout() {
+		var show2d = (UINodes.inst != null && UINodes.inst.show) || (UIView2D.inst != null && UIView2D.inst.show);
+		raw.layout = [
+			Std.int(UISidebar.defaultWindowW * raw.window_scale),
+			Std.int(kha.System.windowHeight() / 3),
+			Std.int(kha.System.windowHeight() / 3),
+			Std.int(kha.System.windowHeight() / 3),
+			show2d ? Std.int((iron.App.w() + raw.layout[LayoutNodesW]) / 2) : Std.int(iron.App.w() / 2),
+			Std.int(iron.App.h() / 2),
+			Std.int(UIStatus.defaultStatusH * raw.window_scale)
+		];
+	}
 }

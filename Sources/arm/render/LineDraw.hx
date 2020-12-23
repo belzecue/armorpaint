@@ -19,7 +19,7 @@ import arm.Enums;
 class LineDraw {
 
 	public static var color: kha.Color = 0xffff0000;
-	public static var strength = 0.02;
+	public static var strength = 0.005;
 	public static var mat: iron.math.Mat4 = null;
 	public static var dim: iron.math.Vec4 = null;
 
@@ -42,12 +42,13 @@ class LineDraw {
 
 	public static function render(g4: kha.graphics4.Graphics) {
 
+		var hide = Operator.shortcut(Config.keymap.stencil_hide, ShortcutDown) || iron.system.Input.getKeyboard().down("control");
 		var isPaint = UIHeader.inst.worktab.position == SpacePaint;
-		var isDecal = isPaint && Context.layer.material_mask != null && Context.layer.uvType == UVProject;
-		if (!isDecal) return;
+		var isDecal = isPaint && Context.layer.fill_layer != null && Context.layer.uvType == UVProject && !Context.layerIsMask;
+		if (!isDecal || hide) return;
 
 		mat = Context.layer.decalMat;
-		dim = Context.layer.decalDim;
+		dim = Context.layer.decalMat.getScale();
 
 		g = g4;
 
@@ -57,8 +58,8 @@ class LineDraw {
 			structure.add("col", VertexData.Float3);
 			pipeline = new PipelineState();
 			pipeline.inputLayout = [structure];
-			pipeline.fragmentShader = kha.Shaders.line_frag;
-			pipeline.vertexShader = kha.Shaders.line_vert;
+			pipeline.fragmentShader = kha.Shaders.getFragment("line.frag");
+			pipeline.vertexShader = kha.Shaders.getVertex("line.vert");
 			pipeline.depthWrite = true;
 			pipeline.depthMode = CompareMode.Less;
 			pipeline.cullMode = CullMode.None;

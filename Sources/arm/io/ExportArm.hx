@@ -4,8 +4,9 @@ import haxe.Json;
 import zui.Nodes;
 import iron.data.SceneFormat;
 import iron.system.ArmPack;
+import iron.system.Lz4;
+import arm.data.FontSlot;
 import arm.ui.UISidebar;
-import arm.format.Lz4;
 import arm.sys.Path;
 import arm.ProjectFormat;
 import arm.Enums;
@@ -38,6 +39,7 @@ class ExportArm {
 		for (p in Project.paintObjects) md.push(p.data.raw);
 
 		var texture_files = assetsToFiles(Project.assets);
+		var font_files = fontsToFiles(Project.fonts);
 		var mesh_files = meshesToFiles();
 
 		var bitsPos = App.bitsHandle.position;
@@ -56,8 +58,10 @@ class ExportArm {
 				uv_scale: l.scale,
 				uv_rot: l.angle,
 				uv_type: l.uvType,
+				decal_mat: l.uvType == UVProject ? l.decalMat.toFloat32Array() : null,
 				opacity_mask: l.maskOpacity,
-				material_mask: l.material_mask != null ? Project.materials.indexOf(l.material_mask) : -1,
+				fill_layer: l.fill_layer != null ? Project.materials.indexOf(l.fill_layer) : -1,
+				fill_mask: l.fill_mask != null ? Project.materials.indexOf(l.fill_mask) : -1,
 				object_mask: l.objectMask,
 				blending: l.blending,
 				parent: l.parent != null ? Project.layers.indexOf(l.parent) : -1,
@@ -81,8 +85,9 @@ class ExportArm {
 			mesh_datas: md,
 			layer_datas: ld,
 			assets: texture_files,
+			font_assets: font_files,
 			mesh_assets: mesh_files,
-			#if kha_metal
+			#if (kha_metal || kha_vulkan)
 			is_bgra: true
 			#else
 			is_bgra: false
@@ -124,7 +129,7 @@ class ExportArm {
 		var raw = {
 			version: Main.version,
 			material_nodes: mnodes,
-			#if kha_metal
+			#if (kha_metal || kha_vulkan)
 			material_icons: [Lz4.encode(bgraSwap(m.image.getPixels()))],
 			#else
 			material_icons: [Lz4.encode(m.image.getPixels())],
@@ -137,7 +142,7 @@ class ExportArm {
 		Krom.fileSaveBytes(path, bytes.getData());
 	}
 
-	#if kha_metal
+	#if (kha_metal || kha_vulkan)
 	static function bgraSwap(bytes: haxe.io.Bytes) {
 		for (i in 0...Std.int(bytes.length / 4)) {
 			var r = bytes.get(i * 4);
@@ -208,5 +213,21 @@ class ExportArm {
 			}
 		}
 		return mesh_files;
+	}
+
+	static function fontsToFiles(fonts: Array<FontSlot>): Array<String> {
+		var font_files: Array<String> = [];
+		for (i in 1...fonts.length) {
+			var f = fonts[i];
+			// Convert font path from absolute to relative
+			var sameDrive = Project.filepath.charAt(0) == f.file.charAt(0);
+			if (sameDrive) {
+				font_files.push(Path.toRelative(Project.filepath, f.file));
+			}
+			else {
+				font_files.push(f.file);
+			}
+		}
+		return font_files;
 	}
 }

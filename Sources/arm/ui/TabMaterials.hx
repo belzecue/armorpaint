@@ -3,11 +3,12 @@ package arm.ui;
 import haxe.Json;
 import zui.Zui;
 import zui.Id;
+import zui.Nodes;
 import iron.system.Time;
 import iron.system.Input;
 import iron.object.MeshObject;
 import iron.data.Data;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.data.MaterialSlot;
 import arm.util.RenderUtil;
 import arm.util.MaterialUtil;
@@ -64,7 +65,7 @@ class TabMaterials {
 			ui.separator(3, false);
 
 			var slotw = Std.int(51 * ui.SCALE());
-			var num = Std.int(UISidebar.inst.windowW / slotw);
+			var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
 
 			for (row in 0...Std.int(Math.ceil(materials.length / num))) {
 				var mult = Config.raw.show_asset_names ? 2 : 1;
@@ -107,7 +108,10 @@ class TabMaterials {
 						if (getSelectedMaterial() != materials[i]) {
 							selectMaterial(i);
 							if (UIHeader.inst.worktab.position == SpaceMaterial) {
-								Layers.updateFillLayers();
+								function _init() {
+									Layers.updateFillLayers();
+								}
+								iron.App.notifyOnInit(_init);
 							}
 						}
 						var mouse = Input.getMouse();
@@ -147,21 +151,21 @@ class TabMaterials {
 							}
 
 							if (ui.button(tr("Duplicate"), Left)) {
-								function dupliMat(_) {
-									iron.App.removeRender(dupliMat);
+								function _init() {
 									Context.material = new MaterialSlot(materials[0].data);
 									materials.push(Context.material);
 									var cloned = Json.parse(Json.stringify(materials[i].canvas));
 									Context.material.canvas = cloned;
 									updateMaterial();
 								}
-								iron.App.notifyOnRender(dupliMat);
+								iron.App.notifyOnInit(_init);
 							}
 
 							if (materials.length > 1 && ui.button(tr("Delete"), Left)) {
 								selectMaterial(i == 0 ? 1 : 0);
 								materials.splice(i, 1);
 								UISidebar.inst.hwnd1.redraws = 2;
+								for (m in Project.materials) updateMaterialPointers(m.canvas.nodes, i);
 							}
 
 							var baseHandle = Id.handle().nest(m.id, {selected: m.paintBase});
@@ -191,7 +195,7 @@ class TabMaterials {
 								heightHandle.changed ||
 								emisHandle.changed ||
 								subsHandle.changed) {
-								MaterialParser.parsePaintMaterial();
+								MakeMaterial.parsePaintMaterial();
 								UIMenu.keepOpen = true;
 							}
 						}, 14 + add);
@@ -218,7 +222,7 @@ class TabMaterials {
 	static function updateMaterial() {
 		UIHeader.inst.headerHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
-		MaterialParser.parsePaintMaterial();
+		MakeMaterial.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		if (decal) RenderUtil.makeDecalPreview();
@@ -226,5 +230,18 @@ class TabMaterials {
 
 	static function getSelectedMaterial():MaterialSlot {
 		return UIHeader.inst.worktab.position == SpaceRender ? Context.materialScene : Context.material;
+	}
+
+	static function updateMaterialPointers(nodes: Array<TNode>, i: Int) {
+		for (n in nodes) {
+			if (n.type == "MATERIAL") {
+				if (n.buttons[0].default_value == i) {
+					n.buttons[0].default_value = 9999; // Material deleted
+				}
+				else if (n.buttons[0].default_value > i) {
+					n.buttons[0].default_value--; // Offset by deleted material
+				}
+			}
+		}
 	}
 }

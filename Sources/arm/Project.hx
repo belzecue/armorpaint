@@ -2,6 +2,7 @@ package arm;
 
 import kha.System;
 import kha.Window;
+import kha.Image;
 import zui.Zui;
 import zui.Id;
 import zui.Nodes;
@@ -18,11 +19,12 @@ import arm.ui.UISidebar;
 import arm.ui.UIFiles;
 import arm.ui.UIBox;
 import arm.ui.UINodes;
+import arm.ui.UIHeader;
 import arm.data.LayerSlot;
 import arm.data.BrushSlot;
 import arm.data.FontSlot;
 import arm.data.MaterialSlot;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.io.ImportAsset;
 import arm.io.ImportArm;
 import arm.io.ImportBlend;
@@ -46,20 +48,19 @@ class Project {
 	public static var layers: Array<LayerSlot> = null;
 	public static var fonts: Array<FontSlot> = null;
 	public static var paintObjects: Array<MeshObject> = null;
+	public static var atlasObjects: Array<Int> = null;
+	public static var atlasNames: Array<String> = null;
 	public static var assetMap = new Map<Int, Dynamic>(); // kha.Image | kha.Font
-	#if arm_world
-	public static var waterPass = true;
-	#end
 	static var meshList: Array<String> = null;
 
 	public static function projectOpen() {
 		UIFiles.show("arm", false, function(path: String) {
 			if (!path.endsWith(".arm")) {
-				Log.error(Strings.error5);
+				Log.error(Strings.error0());
 				return;
 			}
 
-			var current = @:privateAccess kha.graphics4.Graphics2.current;
+			var current = @:privateAccess kha.graphics2.Graphics.current;
 			if (current != null) current.end();
 
 			ImportArm.runProject(path);
@@ -72,8 +73,15 @@ class Project {
 		UIBox.showCustom(function(ui: Zui) {
 			if (ui.tab(Id.handle(), tr("Recent Projects"))) {
 				for (path in Config.raw.recent_projects) {
-					if (ui.button(path, Left)) {
-						var current = @:privateAccess kha.graphics4.Graphics2.current;
+					var file = path;
+					#if krom_windows
+					file = path.replace("/", "\\");
+					#else
+					file = path.replace("\\", "/");
+					#end
+					file = file.substr(file.lastIndexOf(Path.sep) + 1);
+					if (ui.button(file, Left)) {
+						var current = @:privateAccess kha.graphics2.Graphics.current;
 						if (current != null) current.end();
 
 						ImportArm.runProject(path);
@@ -81,6 +89,7 @@ class Project {
 						if (current != null) current.begin(false);
 						UIBox.show = false;
 					}
+					if (ui.isHovered) ui.tooltip(path);
 				}
 				if (ui.button("Clear", Left)) {
 					Config.raw.recent_projects = [];
@@ -97,12 +106,11 @@ class Project {
 		}
 		Window.get(0).title = UIFiles.filename + " - ArmorPaint";
 
-		function export(_) {
+		function _init() {
 			ExportArm.runProject();
-			iron.App.removeRender(export);
 			if (saveAndQuit) System.stop();
 		}
-		iron.App.notifyOnRender(export);
+		iron.App.notifyOnInit(_init);
 	}
 
 	public static function projectSaveAs() {
@@ -157,6 +165,8 @@ class Project {
 
 		ViewportUtil.resetViewport();
 		Context.layerPreviewDirty = true;
+		Context.layerFilter = 0;
+		Project.meshAssets = [];
 
 		Context.paintObject = Context.mainObject();
 
@@ -171,7 +181,9 @@ class Project {
 		var len = meshes.length;
 		for (i in 0...len) {
 			var m = meshes[len - i - 1];
-			if (Context.projectObjects.indexOf(m) == -1) {
+			if (Context.projectObjects.indexOf(m) == -1 &&
+				m.name != ".ParticleEmitter" &&
+				m.name != ".Particle") {
 				Data.deleteMesh(m.data.handle);
 				m.remove();
 			}
@@ -185,8 +197,8 @@ class Project {
 			var raw: TMeshData = null;
 			if (Context.projectType == ModelSphere || Context.projectType == ModelTessellatedPlane) {
 				var mesh: Dynamic = Context.projectType == ModelSphere ?
-					new arm.format.proc.Sphere(1, 512, 256) :
-					new arm.format.proc.Plane(1, 1, 512, 512);
+					new arm.geom.Sphere(1, 512, 256) :
+					new arm.geom.Plane(1, 1, 512, 512);
 				raw = {
 					name: "Tessellated",
 					vertex_arrays: [
@@ -216,21 +228,15 @@ class Project {
 			}
 		}
 
-		var n = Context.projectType == ModelRoundedCube ? "Cube" : "Tessellated";
+		var n = Context.projectType == ModelRoundedCube ? ".Cube" : "Tessellated";
 		Data.getMesh("Scene", n, function(md: MeshData) {
 
-			var current = @:privateAccess kha.graphics4.Graphics2.current;
+			var current = @:privateAccess kha.graphics2.Graphics.current;
 			if (current != null) current.end();
 
 			Context.pickerMaskHandle.position = MaskNone;
 			Context.paintObject.setData(md);
 			Context.paintObject.transform.scale.set(1, 1, 1);
-			#if arm_creator
-			if (Context.projectType == ModelTessellatedPlane) {
-				Context.paintObject.transform.loc.set(0, 0, -0.15);
-				Context.paintObject.transform.scale.set(10, 10, 1);
-			}
-			#end
 			Context.paintObject.transform.buildMatrix();
 			Context.paintObject.name = n;
 			paintObjects = [Context.paintObject];
@@ -247,14 +253,14 @@ class Project {
 
 			History.reset();
 
-			MaterialParser.parsePaintMaterial();
+			MakeMaterial.parsePaintMaterial();
 			RenderUtil.makeMaterialPreview();
 			for (a in assets) Data.deleteImage(a.file);
 			assets = [];
 			assetNames = [];
 			assetId = 0;
 			Context.ddirty = 4;
-			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd0.redraws = 2;
 			UISidebar.inst.hwnd1.redraws = 2;
 			UISidebar.inst.hwnd2.redraws = 2;
 
@@ -265,9 +271,9 @@ class Project {
 				layers.push(layer);
 				Context.setLayer(layer);
 				if (aspectRatioChanged) {
-					iron.App.notifyOnRender(Layers.resizeLayers);
+					iron.App.notifyOnInit(Layers.resizeLayers);
 				}
-				iron.App.notifyOnRender(Layers.initLayers);
+				iron.App.notifyOnInit(Layers.initLayers);
 			}
 
 			if (current != null) current.begin(false);
@@ -280,6 +286,7 @@ class Project {
 			Scene.active.world.probe.radianceMipmaps = Context.defaultRadianceMipmaps;
 			Scene.active.world.probe.irradiance = Context.defaultIrradiance;
 			Scene.active.world.probe.raw.strength = 4.0;
+			Context.initTool();
 		});
 	}
 
@@ -324,14 +331,13 @@ class Project {
 				});
 
 				// Parse brush
-				MaterialParser.parseBrush();
+				MakeMaterial.parseBrush();
 				Context.parseBrushInputs();
 				UINodes.inst.hwnd.redraws = 2;
-				function makeBrushPreview(_) {
+				function _init() {
 					RenderUtil.makeBrushPreview();
-					iron.App.removeRender(makeBrushPreview);
 				}
-				iron.App.notifyOnRender(makeBrushPreview);
+				iron.App.notifyOnInit(_init);
 			}
 			// Import from project file
 			else {
@@ -376,14 +382,18 @@ class Project {
 					if (ui.isHovered) ui.tooltip(tr("Import vertex color data"));
 				}
 
-				ui.row([0.5, 0.5]);
+				ui.row([0.45, 0.45, 0.1]);
 				if (ui.button(tr("Cancel"))) {
 					UIBox.show = false;
 				}
 				if (ui.button(tr("Import")) || ui.isReturnDown) {
 					UIBox.show = false;
 					App.redrawUI();
-					ImportMesh.run(path);
+					var replaceExisting = UIHeader.inst.worktab.position != SpaceRender;
+					ImportMesh.run(path, true, replaceExisting);
+				}
+				if (ui.button(tr("?"))) {
+					File.explorer("https://github.com/armory3d/armorpaint_docs/blob/master/faq.md");
 				}
 			}
 		});
@@ -412,5 +422,9 @@ class Project {
 				Project.assetMap.set(asset.id, image);
 			});
 		}
+	}
+
+	public static function getImage(asset: TAsset): Image {
+		return asset != null ? Project.assetMap.get(asset.id) : null;
 	}
 }

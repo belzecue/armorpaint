@@ -57,8 +57,8 @@ class Inc {
 		var t = new RenderTargetRaw();
 		t.name = tname;
 		t.format = "R8";
-		var res = getVoxelRes();
-		var resZ =  getVoxelResZ();
+		var res = 256;
+		var resZ =  1.0;
 		t.width = res;
 		t.height = res;
 		t.depth = Std.int(res * resZ);
@@ -80,56 +80,46 @@ class Inc {
 		}
 		#end
 	}
-
-	public static inline function getVoxelRes(): Int {
-		return 256;
-	}
-
-	public static inline function getVoxelResZ(): Float {
-		return 1.0;
-	}
 	#end
 
 	public static inline function getSuperSampling(): Float {
 		return superSample;
 	}
 
-	#if arm_painter
 	public static function drawCompass(currentG: kha.graphics4.Graphics) {
 		if (Context.showCompass) {
 			var scene = Scene.active;
 			var cam = Scene.active.camera;
-			var gizmo: MeshObject = cast scene.getChild(".GizmoTranslate");
+			var compass: MeshObject = cast scene.getChild(".Compass");
 
-			var visible = gizmo.visible;
-			var parent = gizmo.parent;
-			var loc = gizmo.transform.loc;
-			var rot = gizmo.transform.rot;
+			var visible = compass.visible;
+			var parent = compass.parent;
+			var loc = compass.transform.loc;
+			var rot = compass.transform.rot;
 			var crot = cam.transform.rot;
 			var ratio = iron.App.w() / iron.App.h();
 			var P = cam.P;
 			cam.P = Mat4.ortho(-8 * ratio, 8 * ratio, -8, 8, -2, 2);
-			gizmo.visible = true;
-			gizmo.parent = cam;
-			gizmo.transform.loc = new Vec4(7.4 * ratio, 7.0, -1);
-			gizmo.transform.rot = new Quat(-crot.x, -crot.y, -crot.z, crot.w);
-			gizmo.transform.scale.set(0.4, 0.4, 0.4);
-			gizmo.transform.buildMatrix();
+			compass.visible = true;
+			compass.parent = cam;
+			compass.transform.loc = new Vec4(7.4 * ratio, 7.0, -1);
+			compass.transform.rot = new Quat(-crot.x, -crot.y, -crot.z, crot.w);
+			compass.transform.scale.set(0.4, 0.4, 0.4);
+			compass.transform.buildMatrix();
 
-			gizmo.render(currentG, "overlay", []);
+			compass.render(currentG, "overlay", []);
 
 			cam.P = P;
-			gizmo.visible = visible;
-			gizmo.parent = parent;
-			gizmo.transform.loc = loc;
-			gizmo.transform.rot = rot;
-			gizmo.transform.buildMatrix();
+			compass.visible = visible;
+			compass.parent = parent;
+			compass.transform.loc = loc;
+			compass.transform.rot = rot;
+			compass.transform.buildMatrix();
 		}
 	}
-	#end
 
 	public static function beginSplit() {
-		if (Context.splitView) {
+		if (Context.splitView && !Context.paint2dView) {
 
 			if (Context.viewIndexLast == -1 && Context.viewIndex == -1) {
 				// Begin split, draw right viewport first
@@ -157,7 +147,16 @@ class Inc {
 		}
 	}
 
-	public static function endSplit() {
+	public static function end() {
+		endSplit();
+
+		if (Context.foregroundEvent && !iron.system.Input.getMouse().down()) {
+			Context.foregroundEvent = false;
+			Context.pdirty = 0;
+		}
+	}
+
+	static function endSplit() {
 		Context.viewIndexLast = Context.viewIndex;
 		Context.viewIndex = -1;
 	}
@@ -167,7 +166,6 @@ class Inc {
 	}
 
 	public static function isCached(): Bool {
-		#if (!arm_creator)
 		var mouse = Input.getMouse();
 		var mx = lastX;
 		var my = lastY;
@@ -184,7 +182,6 @@ class Inc {
 			if (moved || Context.brushLocked) {
 				Context.rdirty = 2;
 			}
-			Context.sub = 0;
 		}
 
 		if (Context.ddirty <= 0 && Context.rdirty <= 0 && (Context.pdirty <= 0 || UIHeader.inst.worktab.position == SpaceRender)) {
@@ -202,11 +199,13 @@ class Inc {
 				if (Config.raw.brush_3d) RenderPathPaint.commandsCursor();
 				if (Context.ddirty <= 0) Context.ddirty--;
 			}
-			endSplit();
-			RenderPathPaint.finishPaint();
+			end();
+			if (!RenderPathPaint.dilated) {
+				RenderPathPaint.dilate(Config.raw.dilate == DilateDelayed, true);
+				RenderPathPaint.dilated = true;
+			}
 			return true;
 		}
-		#end
 		return false;
 	}
 }

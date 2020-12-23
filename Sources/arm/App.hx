@@ -34,7 +34,7 @@ import arm.data.MaterialSlot;
 import arm.data.LayerSlot;
 import arm.data.ConstData;
 import arm.plugin.Camera;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.Enums;
 import arm.ProjectFormat;
 import arm.Res;
@@ -65,10 +65,12 @@ class App {
 	static var dropPaths: Array<String> = [];
 	static var appx = 0;
 	static var appy = 0;
+	static var lastWindowWidth = 0;
 	static var lastWindowHeight = 0;
 
 	public function new() {
 		Log.init();
+		lastWindowWidth = System.windowWidth();
 		lastWindowHeight = System.windowHeight();
 
 		#if arm_resizable
@@ -92,6 +94,7 @@ class App {
 
 		System.notifyOnApplicationState(
 			function() { // Foreground
+				Context.foregroundEvent = true;
 				Context.lastPaintX = -1;
 				Context.lastPaintY = -1;
 			},
@@ -119,7 +122,7 @@ class App {
 
 				// Precompiled font for fast startup
 				if (Config.raw.locale == "en") {
-					var kimg: kha.Kravur.KravurImage = js.lib.Object.create(untyped kha.Kravur.KravurImage.prototype);
+					var kimg: kha.Font.KravurImage = js.lib.Object.create(untyped kha.Font.KravurImage.prototype);
 					@:privateAccess kimg.mySize = 13;
 					@:privateAccess kimg.width = 128;
 					@:privateAccess kimg.height = 128;
@@ -137,15 +140,23 @@ class App {
 					@:privateAccess kimg.chars = chars;
 					Data.getBlob("font13.bin", function(fontbin: kha.Blob) {
 						@:privateAccess kimg.texture = Image.fromBytes(fontbin.toBytes(), 128, 128, kha.graphics4.TextureFormat.L8);
-						@:privateAccess cast(font, kha.Kravur).images.set(130095, kimg);
+						@:privateAccess cast(font, kha.Font).images.set(130095, kimg);
 					});
 				}
 
 				colorWheel = image;
 				Nodes.enumTexts = enumTexts;
+				Nodes.tr = tr;
 				uiBox = new Zui({ font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
 				uiMenu = new Zui({ font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
 				defaultElementH = uiMenu.t.ELEMENT_H;
+
+				// Init plugins
+				if (Config.raw.plugins != null) {
+					for (plugin in Config.raw.plugins) {
+						Plugin.start(plugin);
+					}
+				}
 
 				Args.parse();
 
@@ -167,9 +178,6 @@ class App {
 				var cam = Scene.active.camera;
 				cam.data.raw.fov = Std.int(cam.data.raw.fov * 100) / 100;
 				cam.buildProjection();
-				#if arm_creator
-				Project.projectNew(); // Spawns plane as default object
-				#end
 
 				Args.run();
 
@@ -200,19 +208,23 @@ class App {
 
 		var res = 0;
 		if (UINodes.inst == null || UISidebar.inst == null) {
-			res = System.windowWidth() - UISidebar.defaultWindowW - UIToolbar.defaultToolbarW;
+			var sidebarw = Config.raw.layout == null ? UISidebar.defaultWindowW : Config.raw.layout[LayoutSidebarW];
+			res = System.windowWidth() - sidebarw - UIToolbar.defaultToolbarW;
 		}
 		else if (UINodes.inst.show || UIView2D.inst.show) {
-			res = System.windowWidth() - UISidebar.inst.windowW - UINodes.inst.defaultWindowW - UIToolbar.inst.toolbarw;
+			res = System.windowWidth() - Config.raw.layout[LayoutSidebarW] - Config.raw.layout[LayoutNodesW] - UIToolbar.inst.toolbarw;
 		}
 		else if (UISidebar.inst.show) {
-			res = System.windowWidth() - UISidebar.inst.windowW - UIToolbar.inst.toolbarw;
+			res = System.windowWidth() - Config.raw.layout[LayoutSidebarW] - UIToolbar.inst.toolbarw;
 		}
 		else { // Distract free
 			res = System.windowWidth();
 		}
 		if (UISidebar.inst != null && Context.viewIndex > -1) {
 			res = Std.int(res / 2);
+		}
+		if (Context.paint2dView) {
+			res = UIView2D.inst.ww;
 		}
 
 		return res > 0 ? res : 1; // App was minimized, force render path resize
@@ -234,7 +246,8 @@ class App {
 			res -= UIHeader.defaultHeaderH * 2 + UIStatus.defaultStatusH;
 		}
 		else if (UISidebar.inst != null && UISidebar.inst.show && res > 0) {
-			res -= Std.int(UIHeader.defaultHeaderH * 2 * Config.raw.window_scale) + UIStatus.inst.statush;
+			var statush = Config.raw.layout[LayoutStatusH];
+			res -= Std.int(UIHeader.defaultHeaderH * 2 * Config.raw.window_scale) + statush;
 		}
 
 		return res > 0 ? res : 1; // App was minimized, force render path resize
@@ -250,18 +263,28 @@ class App {
 
 	#if arm_resizable
 	static function onResize() {
+		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
+
+		var ratioW = System.windowWidth() / lastWindowWidth;
+		lastWindowWidth = System.windowWidth();
+		var ratioH = System.windowHeight() / lastWindowHeight;
+		lastWindowHeight = System.windowHeight();
+
+		Config.raw.layout[LayoutNodesW] = Std.int(Config.raw.layout[LayoutNodesW] * ratioW);
+		Config.raw.layout[LayoutSidebarH0] = Std.int(Config.raw.layout[LayoutSidebarH0] * ratioH);
+		Config.raw.layout[LayoutSidebarH1] = Std.int(Config.raw.layout[LayoutSidebarH1] * ratioH);
+		Config.raw.layout[LayoutSidebarH2] = System.windowHeight() - Config.raw.layout[LayoutSidebarH0] - Config.raw.layout[LayoutSidebarH1];
+
 		resize();
 
-		var ratio = System.windowHeight() / lastWindowHeight;
-		UISidebar.inst.tabh = Std.int(UISidebar.inst.tabh * ratio);
-		UISidebar.inst.tabh1 = Std.int(UISidebar.inst.tabh1 * ratio);
-		UISidebar.inst.tabh2 = System.windowHeight() - UISidebar.inst.tabh - UISidebar.inst.tabh1;
-		lastWindowHeight = System.windowHeight();
+		#if (krom_linux || krom_darwin)
+		saveWindowRect();
+		#end
 	}
 	#end
 
 	static function saveWindowRect() {
-		#if krom_windows
+		#if (krom_windows || krom_linux || krom_darwin)
 		Config.raw.window_w = System.windowWidth();
 		Config.raw.window_h = System.windowHeight();
 		Config.raw.window_x = kha.Window.get(0).x;
@@ -304,7 +327,7 @@ class App {
 	}
 
 	public static function redrawUI() {
-		UISidebar.inst.hwnd.redraws = 2;
+		UISidebar.inst.hwnd0.redraws = 2;
 		UISidebar.inst.hwnd1.redraws = 2;
 		UISidebar.inst.hwnd2.redraws = 2;
 		UIHeader.inst.headerHandle.redraws = 2;
@@ -313,11 +336,17 @@ class App {
 		UIMenubar.inst.menuHandle.redraws = 2;
 		UIMenubar.inst.workspaceHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
+		UIView2D.inst.hwnd.redraws = 2;
 		if (Context.ddirty < 0) Context.ddirty = 0; // Redraw viewport
+		if (Context.splitView) Context.ddirty = 1;
 	}
 
 	static function update() {
 		var mouse = Input.getMouse();
+
+		if (mouse.movementX != 0 || mouse.movementY != 0) {
+			Krom.setMouseCursor(0); // Arrow
+		}
 
 		if ((dragAsset != null || dragMaterial != null || dragLayer != null || dragFile != null) &&
 			(mouse.movementX != 0 || mouse.movementY != 0)) {
@@ -328,8 +357,8 @@ class App {
 			var my = mouse.y;
 			var inViewport = Context.paintVec.x < 1 && Context.paintVec.x > 0 &&
 							 Context.paintVec.y < 1 && Context.paintVec.y > 0;
-			var inLayers = UISidebar.inst.htab.position == 0 &&
-						   mx > UISidebar.inst.tabx && my < UISidebar.inst.tabh;
+			var inLayers = UISidebar.inst.htab0.position == 0 &&
+						   mx > UISidebar.inst.tabx && my < Config.raw.layout[LayoutSidebarH0];
 			var in2dView = UIView2D.inst.show && UIView2D.inst.type == View2DLayer &&
 						   mx > UIView2D.inst.wx && mx < UIView2D.inst.wx + UIView2D.inst.ww &&
 						   my > UIView2D.inst.wy && my < UIView2D.inst.wy + UIView2D.inst.wh;
@@ -347,15 +376,23 @@ class App {
 					}
 					UINodes.inst.acceptAssetDrag(index);
 				}
-				else if (inViewport || inLayers || in2dView) { // Create mask
+				else if (inLayers || in2dView) { // Create mask
 					Layers.createImageMask(dragAsset);
+				}
+				else if (inViewport) {
+					if (dragAsset.file.toLowerCase().endsWith(".hdr")) {
+						var image = Project.getImage(dragAsset);
+						arm.io.ImportEnvmap.run(dragAsset.file, image);
+					}
 				}
 				dragAsset = null;
 			}
 			else if (dragMaterial != null) {
 				// Material dragged onto viewport or layers tab
 				if (inViewport || inLayers || in2dView) {
-					Layers.createFillLayer();
+					var uvType = Input.getKeyboard().down("control") ? UVProject : UVMap;
+					var decalMat = uvType == UVProject ? RenderUtil.getDecalMat() : null;
+					Layers.createFillLayer(uvType, decalMat);
 				}
 				else if (inNodes) {
 					var index = 0;
@@ -381,16 +418,16 @@ class App {
 					UINodes.inst.acceptLayerDrag(index);
 				}
 				else if (inLayers && isDragging) {
-					Project.layers.remove(dragLayer);
-					Project.layers.insert(TabLayers.dragDestination, dragLayer);
-					MaterialParser.parseMeshMaterial();
+					dragLayer.move(Context.dragDestination);
+					MakeMaterial.parseMeshMaterial();
 				}
 				dragLayer = null;
 			}
 			else if (dragFile != null) {
+				var statush = Config.raw.layout[LayoutStatusH];
 				var inBrowser =
-					mx > iron.App.x() && mx < iron.App.x() + (System.windowWidth() - UIToolbar.inst.toolbarw - UISidebar.inst.windowW) &&
-					my > System.windowHeight() - UIStatus.inst.statush;
+					mx > iron.App.x() && mx < iron.App.x() + (System.windowWidth() - UIToolbar.inst.toolbarw - Config.raw.layout[LayoutSidebarW]) &&
+					my > System.windowHeight() - statush;
 				if (!inBrowser) {
 					dropX = mouse.x;
 					dropY = mouse.y;
@@ -398,6 +435,7 @@ class App {
 				}
 				dragFile = null;
 			}
+			Krom.setMouseCursor(0); // Arrow
 			isDragging = false;
 		}
 
@@ -441,16 +479,24 @@ class App {
 
 	static function getDragBackground(): TRect {
 		var icons = Res.get("icons.k");
-		if (dragLayer != null) return Res.tile50(icons, 4, 1);
+		if (dragLayer != null && dragLayer.getChildren() == null) return Res.tile50(icons, 4, 1);
 		else return null;
 	}
 
 	static function getDragImage(): kha.Image {
 		dragTint = 0xffffffff;
 		dragRect = null;
-		if (dragAsset != null) return UISidebar.inst.getImage(dragAsset);
+		if (dragAsset != null) return Project.getImage(dragAsset);
 		if (dragMaterial != null) return dragMaterial.imageIcon;
 		if (dragLayer != null && Context.layerIsMask) return dragLayer.texpaint_mask_preview;
+		if (dragLayer != null && dragLayer.getChildren() != null) {
+			var icons = Res.get("icons.k");
+			var folderClosed = Res.tile50(icons, 2, 1);
+			var folderOpen = Res.tile50(icons, 8, 1);
+			dragRect = dragLayer.show_panel ? folderOpen : folderClosed;
+			dragTint = UISidebar.inst.ui.t.LABEL_COL - 0x00202020;
+			return icons;
+		}
 		if (dragFile != null) {
 			var icons = Res.get("icons.k");
 			dragRect = dragFile.indexOf(".") > 0 ? Res.tile50(icons, 3, 1) : Res.tile50(icons, 2, 1);
@@ -466,8 +512,8 @@ class App {
 		if (Context.frame == 2) {
 			RenderUtil.makeMaterialPreview();
 			UISidebar.inst.hwnd1.redraws = 2;
-			MaterialParser.parseMeshMaterial();
-			MaterialParser.parsePaintMaterial();
+			MakeMaterial.parseMeshMaterial();
+			MakeMaterial.parsePaintMaterial();
 			Context.ddirty = 0;
 			History.reset();
 			if (History.undoLayers == null) {
@@ -476,6 +522,21 @@ class App {
 					var l = new LayerSlot("_undo" + History.undoLayers.length);
 					l.createMask(0, false);
 					History.undoLayers.push(l);
+				}
+			}
+			// Default workspace
+			if (Config.raw.workspace != 0) {
+				UIHeader.inst.worktab.position = Config.raw.workspace;
+				UIMenubar.inst.workspaceHandle.redraws = 2;
+				if (UIHeader.inst.worktab.position == SpaceBake) {
+					Context.selectTool(ToolBake);
+				}
+				else {
+					Context.selectTool(ToolGizmo);
+				}
+				if (UIHeader.inst.worktab.position == SpaceMaterial) {
+					Layers.updateFillLayers();
+					UINodes.inst.show = true;
 				}
 			}
 		}
@@ -517,7 +578,7 @@ class App {
 		}
 		else {
 			if (Context.splitView) {
-				Context.viewIndex = Input.getMouse().viewX > arm.App.w() / 2 ? 1 : 0;
+				Context.viewIndex = mouse.viewX > arm.App.w() / 2 ? 1 : 0;
 			}
 
 			Context.lastPaintVecX = mouse.viewX / iron.App.w();
@@ -553,5 +614,24 @@ class App {
 	public static function getAssetIndex(fileName: String): Int {
 		var i = Project.assetNames.indexOf(fileName);
 		return i >= 0 ? i : 0;
+	}
+
+	public static function notifyOnNextFrame(f: Void->Void) {
+		function _update() {
+			iron.App.notifyOnInit(f);
+			iron.App.removeUpdate(_update);
+		}
+		iron.App.notifyOnUpdate(_update);
+	}
+
+	public static function toggleFullscreen() {
+		if (kha.Window.get(0).mode == kha.WindowMode.Windowed) {
+			kha.Window.get(0).mode = kha.WindowMode.Fullscreen;
+		}
+		else {
+			kha.Window.get(0).mode = kha.WindowMode.Windowed;
+			kha.Window.get(0).resize(Config.raw.window_w, Config.raw.window_h);
+			kha.Window.get(0).move(Config.raw.window_x, Config.raw.window_y);
+		}
 	}
 }

@@ -6,7 +6,7 @@ import zui.Id;
 import iron.system.Input;
 import iron.system.Time;
 import iron.system.ArmPack;
-import arm.format.Lz4;
+import iron.system.Lz4;
 import arm.sys.Path;
 import arm.sys.File;
 
@@ -21,11 +21,11 @@ class UIFiles {
 	static var showExtensions = true;
 
 	public static function show(filters: String, isSave: Bool, filesDone: String->Void) {
-		if (!Config.raw.native_file_browser) {
-			if (path == null) path = defaultPath;
-			showCustom(filters, isSave, filesDone);
-			return;
-		}
+
+		#if krom_android
+		if (path == null) path = defaultPath;
+		showCustom(filters, isSave, filesDone);
+		#else
 
 		path = isSave ? Krom.saveDialog(filters, "") : Krom.openDialog(filters, "");
 		if (path != null) {
@@ -36,8 +36,10 @@ class UIFiles {
 			filesDone(path);
 		}
 		releaseKeys();
+		#end
 	}
 
+	#if krom_android
 	@:access(zui.Zui)
 	static function showCustom(filters: String, isSave: Bool, filesDone: String->Void) {
 		var known = false;
@@ -59,6 +61,7 @@ class UIFiles {
 			}
 		}, 600, 500);
 	}
+	#end
 
 	static function releaseKeys() {
 		// File dialog may prevent firing key up events
@@ -189,7 +192,11 @@ class UIFiles {
 				var label = (showExtensions || f.indexOf(".") <= 0) ? f : f.substr(0, f.lastIndexOf("."));
 				ui.text(label, Center);
 				ui._y -= slotw * 0.75;
+
+				if (handle.changed) break;
 			}
+
+			if (handle.changed) break;
 		}
 		ui._y += slotw * 0.8;
 

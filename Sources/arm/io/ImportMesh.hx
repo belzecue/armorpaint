@@ -19,14 +19,17 @@ import arm.Enums;
 class ImportMesh {
 
 	public static var clearLayers = true;
+	public static var replaceExisting = true;
 
-	public static function run(path: String, _clearLayers = true) {
+	public static function run(path: String, _clearLayers = true, _replaceExisting = true) {
 		if (!Path.isMesh(path)) {
-			Log.error(Strings.error1);
+			Log.error(Strings.error1());
 			return;
 		}
 
 		clearLayers = _clearLayers;
+		replaceExisting = _replaceExisting;
+		Context.layerFilter = 0;
 
 		#if arm_debug
 		var timer = iron.system.Time.realTime();
@@ -67,13 +70,13 @@ class ImportMesh {
 		}
 		Project.meshAssets = [path];
 
-		if (UIHeader.inst.worktab.position != SpaceRender) {
+		if (replaceExisting) {
 			ViewportUtil.scaleToBounds();
 		}
 
 		if (Context.paintObject.name == "") Context.paintObject.name = "Object";
-		arm.node.MaterialParser.parsePaintMaterial();
-		arm.node.MaterialParser.parseMeshMaterial();
+		arm.node.MakeMaterial.parsePaintMaterial();
+		arm.node.MakeMaterial.parseMeshMaterial();
 
 		UIView2D.inst.hwnd.redraws = 2;
 
@@ -88,7 +91,7 @@ class ImportMesh {
 
 	public static function makeMesh(mesh: Dynamic, path: String) {
 		if (mesh == null || mesh.posa == null || mesh.nora == null || mesh.inda == null || mesh.posa.length == 0) {
-			Log.error(Strings.error3);
+			Log.error(Strings.error3());
 			return;
 		}
 
@@ -105,25 +108,7 @@ class ImportMesh {
 		}
 
 		new MeshData(raw, function(md: MeshData) {
-
-			// Append
-			if (UIHeader.inst.worktab.position == SpaceRender) {
-				var mats = new haxe.ds.Vector(1);
-				mats[0] = Context.materialScene.data;
-				var object = Scene.active.addMeshObject(md, mats, Scene.active.getChild("Scene"));
-				var ar = path.split(Path.sep);
-				var s = ar[ar.length - 1];
-				object.name = s.substring(0, s.length - 4);
-				// md.geom.calculateAABB();
-				// var aabb = md.geom.aabb;
-				// var dim = new TFloat32Array(3);
-				// dim[0] = aabb.x;
-				// dim[1] = aabb.y;
-				// dim[2] = aabb.z;
-				// object.raw.dimensions = dim;
-				Context.selectObject(object);
-			}
-			else { // Replace
+			if (replaceExisting) {
 				Context.paintObject = Context.mainObject();
 
 				Context.selectPaintObject(Context.mainObject());
@@ -139,9 +124,9 @@ class ImportMesh {
 				}
 
 				if (clearLayers) {
-					while (Project.layers.length > 1) { var l = Project.layers.pop(); l.unload(); }
-					Context.setLayer(Project.layers[0]);
-					iron.App.notifyOnRender(Layers.initLayers);
+					while (Project.layers.length > 0) { var l = Project.layers.pop(); l.unload(); }
+					Layers.newLayer(false);
+					iron.App.notifyOnInit(Layers.initLayers);
 					History.reset();
 				}
 
@@ -157,16 +142,33 @@ class ImportMesh {
 
 				Project.paintObjects = [Context.paintObject];
 			}
+			else { // Append
+				var mats = new haxe.ds.Vector(1);
+				mats[0] = Context.materialScene.data;
+				var object = Scene.active.addMeshObject(md, mats, Scene.active.getChild("Scene"));
+				var ar = path.split(Path.sep);
+				var s = ar[ar.length - 1];
+				object.name = s.substring(0, s.length - 4);
+				// md.geom.calculateAABB();
+				// var aabb = md.geom.aabb;
+				// var dim = new TFloat32Array(3);
+				// dim[0] = aabb.x;
+				// dim[1] = aabb.y;
+				// dim[2] = aabb.z;
+				// object.raw.dimensions = dim;
+				Context.selectObject(object);
+			}
 
 			md.handle = raw.name;
 			Data.cachedMeshes.set(md.handle, md);
 
 			Context.ddirty = 4;
-			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd0.redraws = 2;
 			UISidebar.inst.hwnd1.redraws = 2;
 			UISidebar.inst.hwnd2.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
+			UVUtil.dilatemapCached = false;
 		});
 	}
 
@@ -190,14 +192,15 @@ class ImportMesh {
 			Data.cachedMeshes.set(md.handle, md);
 
 			Context.ddirty = 4;
-			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd0.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
+			UVUtil.dilatemapCached = false;
 		});
 	}
 
 	static function equirectUnwrap(mesh: Dynamic) {
-		Log.error(Strings.error4);
+		Log.error(Strings.error4());
 		var verts = Std.int(mesh.posa.length / 4);
 		mesh.texa = new Int16Array(verts * 2);
 		var n = new Vec4();

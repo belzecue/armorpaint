@@ -9,7 +9,8 @@ import arm.format.JpgWriter;
 import arm.format.PngWriter;
 import arm.format.PngTools;
 import arm.render.RenderPathPaint;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
+import arm.data.LayerSlot;
 import arm.ui.UIHeader;
 import arm.ui.UISidebar;
 import arm.ui.UIFiles;
@@ -24,24 +25,65 @@ class ExportTexture {
 		var timer = iron.system.Time.realTime();
 		#end
 
-		var udimTiles: Array<String> = [];
-		for (l in Project.layers) {
-			if (l.objectMask > 0) {
-				var name = Project.paintObjects[l.objectMask - 1].name;
-				if (name.substr(name.length - 5, 2) == ".1") { // tile.1001
-					udimTiles.push(name.substr(name.length - 5));
-				}
-			}
-		}
-
 		if (bakeMaterial) {
 			runBakeMaterial(path);
 		}
-		else if (udimTiles.length > 0 && Context.layersExport == 0) {
-			for (udimTile in udimTiles) runLayers(path, udimTile);
+		else if (Context.layersExport == ExportPerUdimTile) {
+			var udimTiles: Array<String> = [];
+			for (l in Project.layers) {
+				if (l.objectMask > 0) {
+					var name = Project.paintObjects[l.objectMask - 1].name;
+					if (name.substr(name.length - 5, 2) == ".1") { // tile.1001
+						udimTiles.push(name.substr(name.length - 5));
+					}
+				}
+			}
+			if (udimTiles.length > 0) {
+				for (udimTile in udimTiles) runLayers(path, Project.layers, udimTile);
+			}
+			else runLayers(path, Project.layers);
 		}
-		else {
-			runLayers(path);
+		else if (Context.layersExport == ExportPerObject) {
+			var objectNames: Array<String> = [];
+			for (l in Project.layers) {
+				if (l.objectMask > 0) {
+					var name = Project.paintObjects[l.objectMask - 1].name;
+					if (objectNames.indexOf(name) == -1) {
+						objectNames.push(name);
+					}
+				}
+			}
+			if (objectNames.length > 0) {
+				for (name in objectNames) runLayers(path, Project.layers, name);
+			}
+			else runLayers(path, Project.layers);
+		}
+		else { // Visible or selected
+			var atlasExport = false;
+			if (Project.atlasObjects != null) {
+				for (i in 1...Project.atlasObjects.length) {
+					if (Project.atlasObjects[i - 1] != Project.atlasObjects[i]) {
+						atlasExport = true;
+						break;
+					}
+				}
+			}
+			if (atlasExport) {
+				for (atlasIndex in 0...Project.atlasObjects.length) {
+					var layers: Array<LayerSlot> = [];
+					for (objectIndex in 0...Project.atlasObjects.length) {
+						if (Project.atlasObjects[objectIndex] == atlasIndex) {
+							for (l in Project.layers) {
+								if (l.objectMask - 1 == objectIndex) layers.push(l);
+							}
+						}
+					}
+					if (layers.length > 0) {
+						runLayers(path, layers, Project.atlasNames[atlasIndex]);
+					}
+				}
+			}
+			else runLayers(path, Context.layersExport == ExportSelected ? [Context.layer] : Project.layers);
 		}
 
 		#if arm_debug
@@ -61,26 +103,26 @@ class ExportTexture {
 		var _tool = Context.tool;
 		UIHeader.inst.worktab.position = SpacePaint;
 		Context.tool = ToolFill;
-		MaterialParser.parsePaintMaterial();
+		MakeMaterial.parsePaintMaterial();
 		var _paintObject = Context.paintObject;
 		var planeo: iron.object.MeshObject = cast Scene.active.getChild(".Plane");
 		planeo.visible = true;
 		Context.paintObject = planeo;
 		Context.pdirty = 1;
 		RenderPathPaint.useLiveLayer(true);
-		RenderPathPaint.commandsPaint();
+		RenderPathPaint.commandsPaint(false);
 		RenderPathPaint.useLiveLayer(false);
 		Context.tool = _tool;
-		MaterialParser.parsePaintMaterial();
+		MakeMaterial.parsePaintMaterial();
 		Context.pdirty = 0;
 		UIHeader.inst.worktab.position = _space;
 		planeo.visible = false;
 		Context.paintObject = _paintObject;
 
-		runLayers(path, "", true);
+		runLayers(path, [RenderPathPaint.liveLayer], "", true);
 	}
 
-	static function runLayers(path: String, udimTile = "", bakeMaterial = false) {
+	static function runLayers(path: String, layers: Array<LayerSlot>, objectName = "", bakeMaterial = false) {
 		var textureSizeX = Config.getTextureResX();
 		var textureSizeY = Config.getTextureResY();
 		var formatQuality = Context.formatQuality;
@@ -90,7 +132,8 @@ class ExportTexture {
 		var bits = App.bitsHandle.position == Bits8 ? 8 : 16;
 		var ext = bits == 16 ? ".exr" : formatType == FormatPng ? ".png" : ".jpg";
 		if (f.endsWith(ext)) f = f.substr(0, f.length - 4);
-		ext = udimTile + ext;
+		var isUdim = Context.layersExport == ExportPerUdimTile;
+		if (isUdim) ext = objectName + ext;
 
 		Layers.makeTempImg();
 		Layers.makeExportImg();
@@ -99,9 +142,12 @@ class ExportTexture {
 		var empty = iron.RenderPath.active.renderTargets.get("empty_white").image;
 
 		// Append object mask name
-		var exportAll = Context.layersExport == 0;
-		if (!exportAll && Context.layer.objectMask > 0) {
-			f += "_" + Project.paintObjects[Context.layer.objectMask].name;
+		var exportSelected = Context.layersExport == ExportSelected;
+		if (exportSelected && layers[0].objectMask > 0) {
+			f += "_" + Project.paintObjects[layers[0].objectMask - 1].name;
+		}
+		if (!isUdim && !exportSelected && objectName != "") {
+			f += "_" + objectName;
 		}
 
 		// Clear export layer
@@ -115,16 +161,14 @@ class ExportTexture {
 		Layers.expc.g4.clear(kha.Color.fromFloats(1.0, 0.0, 0.0, 0.0));
 		Layers.expc.g4.end();
 
-		// Export all visible layers or selected only
-		var layers = bakeMaterial ? [RenderPathPaint.liveLayer] :
-					 exportAll ? Project.layers : [Context.layer];
-
 		// Flatten layers
 		for (l1 in layers) {
-			if (exportAll && !l1.isVisible()) continue;
+			if (!exportSelected && !l1.isVisible()) continue;
 
-			if (udimTile != "" && l1.objectMask > 0) {
-				if (!Project.paintObjects[l1.objectMask - 1].name.endsWith(udimTile)) continue;
+			if (objectName != "" && l1.objectMask > 0) {
+				if (isUdim && !Project.paintObjects[l1.objectMask - 1].name.endsWith(objectName)) continue;
+				var perObject = Context.layersExport == ExportPerObject;
+				if (perObject && Project.paintObjects[l1.objectMask - 1].name != objectName) continue;
 			}
 
 			var hasMask = l1.texpaint_mask != null && !bakeMaterial;
@@ -143,7 +187,7 @@ class ExportTexture {
 				Layers.expa.g4.setTexture(Layers.texmask, hasMask ? l1.texpaint_mask : empty);
 				Layers.expa.g4.setTexture(Layers.texa, Layers.imga);
 				Layers.expa.g4.setFloat(Layers.opac, l1.maskOpacity);
-				Layers.expa.g4.setInt(Layers.blending, l1.blending);
+				Layers.expa.g4.setInt(Layers.blending, layers.length > 1 ? l1.blending : 0);
 				Layers.expa.g4.setVertexBuffer(iron.data.ConstData.screenAlignedVB);
 				Layers.expa.g4.setIndexBuffer(iron.data.ConstData.screenAlignedIB);
 				Layers.expa.g4.drawIndexedVertices();
@@ -188,6 +232,16 @@ class ExportTexture {
 				}
 			}
 		}
+
+		#if kha_metal
+		// Flush command list
+		Layers.expa.g2.begin(false);
+		Layers.expa.g2.end();
+		Layers.expb.g2.begin(false);
+		Layers.expb.g2.end();
+		Layers.expc.g2.begin(false);
+		Layers.expc.g2.end();
+		#end
 
 		var texpaint = Layers.expa;
 		var texpaint_nor = Layers.expb;
@@ -273,19 +327,19 @@ class ExportTexture {
 			var writer = new PngWriter(out);
 			var data =
 				type == 1 ?
-					#if kha_metal
+					#if (kha_metal || kha_vulkan)
 					PngTools.build32BGR1(resX, resY, pixels) :
 					#else
 					PngTools.build32RGB1(resX, resY, pixels) :
 					#end
 				type == 2 ?
-					#if kha_metal
+					#if (kha_metal || kha_vulkan)
 					PngTools.build32RRR1(resX, resY, pixels, 2 - off) :
 					#else
 					PngTools.build32RRR1(resX, resY, pixels, off) :
 					#end
 
-					#if kha_metal
+					#if (kha_metal || kha_vulkan)
 					PngTools.build32BGRA(resX, resY, pixels);
 					#else
 					PngTools.build32RGBA(resX, resY, pixels);
@@ -302,7 +356,7 @@ class ExportTexture {
 					pixels: pixels
 				},
 				type,
-				#if kha_metal
+				#if (kha_metal || kha_vulkan)
 				2 - off, true
 				#else
 				off, false

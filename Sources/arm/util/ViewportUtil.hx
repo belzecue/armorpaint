@@ -4,6 +4,7 @@ import kha.arrays.Float32Array;
 import iron.Scene;
 import iron.math.Vec4;
 import arm.ui.UISidebar;
+import arm.plugin.Camera;
 import arm.Enums;
 
 class ViewportUtil {
@@ -18,7 +19,12 @@ class ViewportUtil {
 		po.transform.dim.y = md.geom.aabb.y;
 		po.transform.dim.z = md.geom.aabb.z;
 		po.transform.scale.set(2 / r, 2 / r, 2 / r);
+		po.transform.loc.set(0, 0, 0);
 		po.transform.buildMatrix();
+		for (c in po.children) {
+			c.transform.loc.set(0, 0, 0);
+			c.transform.buildMatrix();
+		}
 	}
 
 	public static function resetViewport() {
@@ -32,7 +38,7 @@ class ViewportUtil {
 				cam.data.raw.ortho = null;
 				cam.buildProjection();
 				Context.ddirty = 2;
-				arm.plugin.Camera.inst.reset();
+				Camera.inst.reset();
 				break;
 			}
 		}
@@ -48,12 +54,12 @@ class ViewportUtil {
 		cam.transform.buildMatrix();
 		cam.buildProjection();
 		Context.ddirty = 2;
-		arm.plugin.Camera.inst.reset();
+		Camera.inst.reset(Context.viewIndexLast);
 	}
 
 	public static function orbit(x: Float, y: Float) {
 		var cam = Scene.active.camera;
-		var dist = arm.plugin.Camera.dist;
+		var dist = Camera.inst.distance();
 		cam.transform.move(cam.lookWorld(), dist);
 		cam.transform.rotate(new Vec4(0, 0, 1), x);
 		cam.transform.rotate(cam.rightWorld(), y);
@@ -61,10 +67,15 @@ class ViewportUtil {
 		Context.ddirty = 2;
 	}
 
+	public static function orbitOpposite() {
+		var cam = Scene.active.camera;
+		var z = Math.abs(cam.look().z) - 1.0;
+		(z < 0.0001 && z > -0.0001) ? ViewportUtil.orbit(0, Math.PI) : ViewportUtil.orbit(Math.PI, 0);
+	}
+
 	public static function zoom(f: Float) {
 		var cam = Scene.active.camera;
 		cam.transform.move(cam.look(), f);
-		arm.plugin.Camera.dist -= f;
 		Context.ddirty = 2;
 	}
 

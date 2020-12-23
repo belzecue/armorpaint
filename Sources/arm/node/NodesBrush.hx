@@ -4,13 +4,141 @@ import zui.Nodes;
 
 class NodesBrush {
 
-	public static var categories = ["Nodes"];
+	// Mark strings as localizable
+	public static inline function _tr(s: String) { return s; }
+
+	public static var categories = [_tr("Nodes")];
 
 	public static var list: Array<Array<TNode>> = [
 		[ // Category 0
+			// {
+			// 	id: 0,
+			// 	name: _tr("Brush Output"),
+			// 	type: "BrushOutputNode",
+			// 	x: 0,
+			// 	y: 0,
+			// 	color: 0xff4982a0,
+			// 	inputs: [
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Position"),
+			// 			type: "VECTOR",
+			// 			color: 0xff63c763,
+			// 			default_value: f32([0.0, 0.0, 0.0])
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Radius"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Scale"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Angle"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 0.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Opacity"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Hardness"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		},
+			// 		{
+			// 			id: 0,
+			// 			node_id: 0,
+			// 			name: _tr("Stencil"),
+			// 			type: "VALUE",
+			// 			color: 0xffa1a1a1,
+			// 			default_value: 1.0
+			// 		}
+			// 	],
+			// 	outputs: [],
+			// 	buttons: [
+			//		{
+			//			name: _tr("Directional"),
+			//			type: "BOOL",
+			//			default_value: false,
+			//			output: 0
+			//		}
+			// ]
+			// },
 			{
 				id: 0,
-				name: "Input",
+				name: _tr("Image Texture"),
+				type: "TEX_IMAGE",
+				x: 0,
+				y: 0,
+				color: 0xff4982a0,
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Vector"),
+						type: "VECTOR",
+						color: 0xff6363c7,
+						default_value: f32([0.0, 0.0, 0.0])
+					}
+				],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Color"),
+						type: "VALUE", // Match brush output socket type
+						color: 0xffc7c729,
+						default_value: f32([0.0, 0.0, 0.0, 1.0])
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Alpha"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 1.0
+					}
+				],
+				buttons: [
+					{
+						name: _tr("file"),
+						type: "ENUM",
+						default_value: 0,
+						data: ""
+					},
+					{
+						name: _tr("color_space"),
+						type: "ENUM",
+						default_value: 0,
+						data: ["linear", "srgb"]
+					}
+				]
+			},
+			{
+				id: 0,
+				name: _tr("Input"),
 				type: "InputNode",
 				x: 0,
 				y: 0,
@@ -19,7 +147,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Lazy Radius",
+						name: _tr("Lazy Radius"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -27,7 +155,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Lazy Step",
+						name: _tr("Lazy Step"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -37,7 +165,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Position",
+						name: _tr("Position"),
 						type: "VECTOR",
 						color: 0xff63c763,
 						default_value: null
@@ -45,84 +173,178 @@ class NodesBrush {
 				],
 				buttons: []
 			},
-			// {
-			// 	id: 0,
-			// 	name: "Brush Output",
-			// 	type: "BrushOutputNode",
-			// 	x: 0,
-			// 	y: 0,
-			// 	color: 0xff4982a0,
-			// 	inputs: [
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Position",
-			// 			type: "VECTOR",
-			// 			color: 0xff63c763,
-			// 			default_value: f32([0.0, 0.0, 0.0])
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Radius",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 1.0
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Scale",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 1.0
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Angle",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 0.0
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Opacity",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 1.0
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Hardness",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 1.0
-			// 		},
-			// 		{
-			// 			id: 0,
-			// 			node_id: 0,
-			// 			name: "Stencil",
-			// 			type: "VALUE",
-			// 			color: 0xffa1a1a1,
-			// 			default_value: 1.0
-			// 		}
-			// 	],
-			// 	outputs: [],
-			// 	buttons: [
-			//		{
-			//			name: "Directional",
-			//			type: "BOOL",
-			//			default_value: false,
-			//			output: 0
-			//		}
-			// ]
-			// },
 			{
 				id: 0,
-				name: "Value",
+				name: _tr("Math"),
+				type: "MathNode",
+				x: 0,
+				y: 0,
+				color: 0xff4982a0,
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Value"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.5
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Value"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.5
+					}
+				],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Value"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					}
+				],
+				buttons: [
+					{
+						name: _tr("operation"),
+						type: "ENUM",
+						data: ["Add", "Subtract", "Multiply", "Divide", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Power", "Logarithm", "Minimum", "Maximum", "Round", "Less Than", "Greater Than", "Module", "Absolute"],
+						default_value: 0,
+						output: 0
+					},
+					{
+						name: _tr("use_clamp"),
+						type: "BOOL",
+						default_value: false,
+						output: 0
+					}
+				]
+			},
+			{
+				id: 0,
+				name: _tr("Random"),
+				type: "RandomNode",
+				x: 0,
+				y: 0,
+				color: 0xffb34f5a,
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Min"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Max"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 1.0
+					}
+				],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Value"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.5
+					}
+				],
+				buttons: []
+			},
+			{
+				id: 0,
+				name: _tr("Separate Vector"),
+				type: "SeparateVectorNode",
+				x: 0,
+				y: 0,
+				color: 0xff4982a0,
+				inputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Vector"),
+						type: "VECTOR",
+						color: 0xff6363c7,
+						default_value: f32([0.0, 0.0, 0.0])
+					}
+				],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("X"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Y"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Z"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					}
+				],
+				buttons: []
+			},
+			{
+				id: 0,
+				name: _tr("Time"),
+				type: "TimeNode",
+				x: 0,
+				y: 0,
+				color: 0xff4982a0,
+				inputs: [],
+				outputs: [
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Time"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Delta"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					},
+					{
+						id: 0,
+						node_id: 0,
+						name: _tr("Brush"),
+						type: "VALUE",
+						color: 0xffa1a1a1,
+						default_value: 0.0
+					}
+				],
+				buttons: []
+			},
+			{
+				id: 0,
+				name: _tr("Value"),
 				type: "FloatNode",
 				x: 0,
 				y: 0,
@@ -131,7 +353,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Value",
+						name: _tr("Value"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.5,
@@ -143,7 +365,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Value",
+						name: _tr("Value"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.5
@@ -153,44 +375,7 @@ class NodesBrush {
 			},
 			{
 				id: 0,
-				name: "Random",
-				type: "RandomNode",
-				x: 0,
-				y: 0,
-				color: 0xffb34f5a,
-				inputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Min",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Max",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 1.0
-					}
-				],
-				outputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Value",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.5
-					}
-				],
-				buttons: []
-			},
-			{
-				id: 0,
-				name: "Vector",
+				name: _tr("Vector"),
 				type: "VectorNode",
 				x: 0,
 				y: 0,
@@ -199,7 +384,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "X",
+						name: _tr("X"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -207,7 +392,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Y",
+						name: _tr("Y"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -215,7 +400,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Z",
+						name: _tr("Z"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -225,7 +410,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Vector",
+						name: _tr("Vector"),
 						type: "VECTOR",
 						color: 0xff6363c7,
 						default_value: f32([0.0, 0.0, 0.0])
@@ -235,52 +420,7 @@ class NodesBrush {
 			},
 			{
 				id: 0,
-				name: "Separate Vector",
-				type: "SeparateVectorNode",
-				x: 0,
-				y: 0,
-				color: 0xff4982a0,
-				inputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Vector",
-						type: "VECTOR",
-						color: 0xff6363c7,
-						default_value: f32([0.0, 0.0, 0.0])
-					}
-				],
-				outputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "X",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Y",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Z",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					}
-				],
-				buttons: []
-			},
-			{
-				id: 0,
-				name: "Vector Math",
+				name: _tr("Vector Math"),
 				type: "VectorMathNode",
 				x: 0,
 				y: 0,
@@ -289,7 +429,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Vector",
+						name: _tr("Vector"),
 						type: "VECTOR",
 						color: 0xff6363c7,
 						default_value: f32([0.0, 0.0, 0.0])
@@ -297,7 +437,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Vector",
+						name: _tr("Vector"),
 						type: "VECTOR",
 						color: 0xff6363c7,
 						default_value: f32([0.0, 0.0, 0.0])
@@ -307,7 +447,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Vector",
+						name: _tr("Vector"),
 						type: "VECTOR",
 						color: 0xff6363c7,
 						default_value: f32([0.0, 0.0, 0.0])
@@ -315,7 +455,7 @@ class NodesBrush {
 					{
 						id: 0,
 						node_id: 0,
-						name: "Value",
+						name: _tr("Value"),
 						type: "VALUE",
 						color: 0xffa1a1a1,
 						default_value: 0.0
@@ -323,148 +463,11 @@ class NodesBrush {
 				],
 				buttons: [
 					{
-						name: "operation",
+						name: _tr("operation"),
 						type: "ENUM",
 						data: ["Add", "Subtract", "Average", "Dot Product", "Cross Product", "Normalize"],
 						default_value: 0,
 						output: 0
-					}
-				]
-			},
-			{
-				id: 0,
-				name: "Math",
-				type: "MathNode",
-				x: 0,
-				y: 0,
-				color: 0xff4982a0,
-				inputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Value",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.5
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Value",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.5
-					}
-				],
-				outputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Value",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					}
-				],
-				buttons: [
-					{
-						name: "operation",
-						type: "ENUM",
-						data: ["Add", "Subtract", "Multiply", "Divide", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Power", "Logarithm", "Minimum", "Maximum", "Round", "Less Than", "Greater Than", "Module", "Absolute"],
-						default_value: 0,
-						output: 0
-					},
-					{
-						name: "use_clamp",
-						type: "BOOL",
-						default_value: false,
-						output: 0
-					}
-				]
-			},
-			{
-				id: 0,
-				name: "Time",
-				type: "TimeNode",
-				x: 0,
-				y: 0,
-				color: 0xff4982a0,
-				inputs: [],
-				outputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Time",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Delta",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Brush",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 0.0
-					}
-				],
-				buttons: []
-			},
-			{
-				id: 0,
-				name: "Image Texture",
-				type: "TEX_IMAGE",
-				x: 0,
-				y: 0,
-				color: 0xff4982a0,
-				inputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Vector",
-						type: "VECTOR",
-						color: 0xff6363c7,
-						default_value: f32([0.0, 0.0, 0.0])
-					}
-				],
-				outputs: [
-					{
-						id: 0,
-						node_id: 0,
-						name: "Color",
-						type: "RGBA",
-						color: 0xffc7c729,
-						default_value: f32([0.0, 0.0, 0.0, 1.0])
-					},
-					{
-						id: 0,
-						node_id: 0,
-						name: "Alpha",
-						type: "VALUE",
-						color: 0xffa1a1a1,
-						default_value: 1.0
-					}
-				],
-				buttons: [
-					{
-						name: "file",
-						type: "ENUM",
-						default_value: 0,
-						data: ""
-					},
-					{
-						name: "color_space",
-						type: "ENUM",
-						default_value: 0,
-						data: ["linear", "srgb"]
 					}
 				]
 			}

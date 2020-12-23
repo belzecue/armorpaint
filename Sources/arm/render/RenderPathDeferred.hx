@@ -3,9 +3,9 @@ package arm.render;
 import kha.System;
 import iron.RenderPath;
 import iron.Scene;
-#if arm_painter
 import arm.ui.UISidebar;
-#end
+import arm.node.MakeMesh;
+import arm.Enums;
 
 class RenderPathDeferred {
 
@@ -86,7 +86,9 @@ class RenderPathDeferred {
 			t.width = 0;
 			t.height = 0;
 			#if (kha_direct3d12 || kha_vulkan)
-			t.format = "RGBA64"; // Match raytrace_target format
+			// Match raytrace_target format
+			// Will cause "The render target format in slot 0 does not match that specified by the current pipeline state"
+			t.format = "RGBA64";
 			#else
 			t.format = "RGBA32";
 			#end
@@ -148,8 +150,8 @@ class RenderPathDeferred {
 			path.renderTargets.set(t.name, rt);
 		}
 
-		path.loadShader("world_pass/world_pass/world_pass");
-		path.loadShader("deferred_light/deferred_light/deferred_light");
+		path.loadShader("shader_datas/world_pass/world_pass");
+		path.loadShader("shader_datas/deferred_light/deferred_light");
 		path.loadShader("shader_datas/compositor_pass/compositor_pass");
 		path.loadShader("shader_datas/copy_pass/copy_pass");
 		path.loadShader("shader_datas/copy_pass/copyR8_pass");
@@ -159,19 +161,6 @@ class RenderPathDeferred {
 		path.loadShader("shader_datas/smaa_neighborhood_blend/smaa_neighborhood_blend");
 		path.loadShader("shader_datas/taa_pass/taa_pass");
 		path.loadShader("shader_datas/supersample_resolve/supersample_resolve");
-
-		#if arm_world
-		{
-			path.loadShader("water_pass/water_pass/water_pass");
-			Scene.active.embedData("water_base.k", function() {});
-			Scene.active.embedData("water_detail.k", function() {});
-			Scene.active.embedData("water_foam.k", function() {});
-			Scene.active.embedData("water_foam.k", function() {});
-			Scene.active.embedData("clouds_base.raw", function() {});
-			Scene.active.embedData("clouds_detail.raw", function() {});
-			Scene.active.embedData("clouds_map.k", function() {});
-		}
-		#end
 
 		#if (rp_motionblur == "Camera")
 		{
@@ -186,14 +175,12 @@ class RenderPathDeferred {
 		#if rp_voxelao
 		{
 			Inc.initGI();
-			path.loadShader("deferred_light/deferred_light/deferred_light_voxel");
+			path.loadShader("shader_datas/deferred_light/deferred_light_voxel");
 		}
 		#end
 
-		#if arm_painter
 		RenderPathPaint.init(path);
 		RenderPathPreview.init(path);
-		#end
 
 		#if (kha_direct3d12 || kha_vulkan)
 		RenderPathRaytrace.init(path);
@@ -202,33 +189,21 @@ class RenderPathDeferred {
 
 	@:access(iron.RenderPath)
 	public static function commands() {
-
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
 
-		#if arm_painter
-
 		Inc.beginSplit();
-
 		if (Inc.isCached()) return;
 
 		// Match projection matrix jitter
-		var skipTaa = Context.splitView;
-		if (!skipTaa) {
-			@:privateAccess Scene.active.camera.frame = RenderPathDeferred.taaFrame;
-			@:privateAccess Scene.active.camera.projectionJitter();
-		}
+		var skipTaa = Context.splitView || ((Context.tool == ToolClone || Context.tool == ToolBlur) && Context.pdirty > 0);
+		@:privateAccess Scene.active.camera.frame = skipTaa ? 0 : RenderPathDeferred.taaFrame;
+		@:privateAccess Scene.active.camera.projectionJitter();
 		Scene.active.camera.buildMatrix();
 
 		RenderPathPaint.begin();
-
 		drawSplit();
-		#end // arm_painter
-
 		drawGbuffer();
-
-		#if arm_painter
 		RenderPathPaint.draw();
-		#end
 
 		#if (kha_direct3d12 || kha_vulkan)
 		if (Context.viewportMode == ViewPathTrace) {
@@ -238,23 +213,14 @@ class RenderPathDeferred {
 		#end
 
 		drawDeferred();
-
-		#if arm_painter
 		RenderPathPaint.end();
-		Inc.endSplit();
-		#end
-
+		Inc.end();
 		taaFrame++;
 	}
 
 	public static function drawDeferred() {
-		#if arm_painter
 		var cameraType = Context.cameraType;
 		var ddirty = Context.ddirty;
-		#else
-		var cameraType = CameraPerspective;
-		var ddirty = 2;
-		#end
 
 		var ssgi = Config.raw.rp_ssgi != false && cameraType == CameraPerspective;
 		if (ssgi && ddirty > 0 && taaFrame > 0) {
@@ -314,19 +280,17 @@ class RenderPathDeferred {
 			#end
 
 			if (voxelize) {
-				var res = Inc.getVoxelRes();
+				var res = 256;
 				var voxtex = voxels;
 
 				path.clearImage(voxtex, 0x00000000);
 				path.setTarget("");
 				path.setViewport(res, res);
 				path.bindTarget(voxtex, "voxels");
-				#if arm_painter
-				if (arm.node.MaterialBuilder.heightUsed) {
+				if (arm.node.MakeMaterial.heightUsed) {
 					var tid = Project.layers[0].id;
 					path.bindTarget("texpaint_pack" + tid, "texpaint_pack");
 				}
-				#end
 				path.drawMeshes("voxel");
 				path.generateMipmaps(voxels);
 			}
@@ -362,35 +326,15 @@ class RenderPathDeferred {
 		#end
 
 		voxelao_pass ?
-			path.drawShader("deferred_light/deferred_light/deferred_light_voxel") :
-			path.drawShader("deferred_light/deferred_light/deferred_light");
-
-		#if arm_world
-		{
-			#if arm_creator
-			var waterPass = Project.waterPass;
-			#else
-			var waterPass = true;
-			#end
-
-			if (waterPass) {
-				path.setTarget("buf");
-				path.bindTarget("tex", "tex");
-				path.drawShader("shader_datas/copy_pass/copy_pass");
-				path.setTarget("tex");
-				path.bindTarget("_main", "gbufferD");
-				path.bindTarget("buf", "tex");
-				path.drawShader("water_pass/water_pass/water_pass");
-			}
-		}
-		#end
+			path.drawShader("shader_datas/deferred_light/deferred_light_voxel") :
+			path.drawShader("shader_datas/deferred_light/deferred_light");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("tex", "gbuffer0"); // Bind depth for world pass
 		#end
 
 		path.setTarget("tex");
-		path.drawSkydome("world_pass/world_pass/world_pass");
+		path.drawSkydome("shader_datas/world_pass/world_pass");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth
@@ -551,9 +495,7 @@ class RenderPathDeferred {
 		path.setTarget("buf");
 		var currentG = path.currentG;
 		path.drawMeshes("overlay");
-		#if arm_painter
 		Inc.drawCompass(currentG);
-		#end
 
 		var current = taaFrame % 2 == 0 ? "bufa" : "taa2";
 		var last = taaFrame % 2 == 0 ? "taa2" : "bufa";
@@ -574,12 +516,7 @@ class RenderPathDeferred {
 		path.bindTarget("gbuffer2", "sveloc");
 		path.drawShader("shader_datas/smaa_neighborhood_blend/smaa_neighborhood_blend");
 
-		#if arm_painter
 		var skipTaa = Context.splitView;
-		#else
-		var skipTaa = false;
-		#end
-
 		if (skipTaa) {
 			path.setTarget("taa");
 			path.bindTarget(current, "tex");
@@ -613,43 +550,102 @@ class RenderPathDeferred {
 		#else
 		path.clearTarget(null, 1.0);
 		#end
-		path.setTarget("gbuffer2");
-		path.clearTarget(0xff000000);
+		if (MakeMesh.layerPassCount == 1) {
+			path.setTarget("gbuffer2");
+			path.clearTarget(0xff000000);
+		}
 		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
 		var currentG = path.currentG;
-		#if arm_painter
 		RenderPathPaint.bindLayers();
-		#end
 		path.drawMeshes("mesh");
-		#if arm_painter
 		RenderPathPaint.unbindLayers();
-		#end
+		if (MakeMesh.layerPassCount > 1) {
+			makeGbufferCopyTextures();
+			for (i in 1...MakeMesh.layerPassCount) {
+				var ping = i % 2 == 1 ? "_copy" : "";
+				var pong = i % 2 == 1 ? "" : "_copy";
+				if (i == MakeMesh.layerPassCount - 1) {
+					path.setTarget("gbuffer2" + ping);
+					path.clearTarget(0xff000000);
+				}
+				path.setTarget("gbuffer0" + ping, ["gbuffer1" + ping, "gbuffer2" + ping]);
+				path.bindTarget("gbuffer0" + pong, "gbuffer0");
+				path.bindTarget("gbuffer1" + pong, "gbuffer1");
+				path.bindTarget("gbuffer2" + pong, "gbuffer2");
+				RenderPathPaint.bindLayers();
+				path.drawMeshes("mesh" + i);
+				RenderPathPaint.unbindLayers();
+			}
+			if (MakeMesh.layerPassCount % 2 == 0) {
+				copyToGbuffer();
+			}
+		}
 		LineDraw.render(currentG);
 	}
 
-	static function drawSplit() {
-		if (Context.splitView) {
-			if (Context.pdirty > 0) {
-				var cam = Scene.active.camera;
-
-				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
-				cam.buildMatrix();
-				cam.buildProjection();
-
-				drawGbuffer();
-
-				#if (kha_direct3d12 || kha_vulkan)
-				Context.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawDeferred();
-				#else
-				drawDeferred();
-				#end
-
-				Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
-				cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
-				cam.buildMatrix();
-				cam.buildProjection();
+	public static function makeGbufferCopyTextures() {
+		var copy = path.renderTargets.get("gbuffer0_copy");
+		if (copy == null || copy.image.width != path.renderTargets.get("gbuffer0").image.width || copy.image.height != path.renderTargets.get("gbuffer0").image.height) {
+			{
+				var t = new RenderTargetRaw();
+				t.name = "gbuffer0_copy";
+				t.width = 0;
+				t.height = 0;
+				t.format = "RGBA64";
+				t.scale = Inc.getSuperSampling();
+				path.createRenderTarget(t);
 			}
+			{
+				var t = new RenderTargetRaw();
+				t.name = "gbuffer1_copy";
+				t.width = 0;
+				t.height = 0;
+				t.format = "RGBA64";
+				t.scale = Inc.getSuperSampling();
+				path.createRenderTarget(t);
+			}
+			{
+				var t = new RenderTargetRaw();
+				t.name = "gbuffer2_copy";
+				t.width = 0;
+				t.height = 0;
+				t.format = "RGBA64";
+				t.scale = Inc.getSuperSampling();
+				path.createRenderTarget(t);
+			}
+		}
+	}
+
+	public static function copyToGbuffer() {
+		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
+		path.bindTarget("gbuffer0_copy", "tex0");
+		path.bindTarget("gbuffer1_copy", "tex1");
+		path.bindTarget("gbuffer2_copy", "tex2");
+		path.drawShader("shader_datas/copy_mrt3_pass/copy_mrt3_pass");
+	}
+
+	static function drawSplit() {
+		if (Context.splitView && !Context.paint2dView) {
+			Context.ddirty = 1;
+			var cam = Scene.active.camera;
+
+			Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+			cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
+			cam.buildMatrix();
+			cam.buildProjection();
+
+			drawGbuffer();
+
+			#if (kha_direct3d12 || kha_vulkan)
+			Context.viewportMode == ViewPathTrace ? RenderPathRaytrace.draw() : drawDeferred();
+			#else
+			drawDeferred();
+			#end
+
+			Context.viewIndex = Context.viewIndex == 0 ? 1 : 0;
+			cam.transform.setMatrix(arm.plugin.Camera.inst.views[Context.viewIndex]);
+			cam.buildMatrix();
+			cam.buildProjection();
 		}
 	}
 }

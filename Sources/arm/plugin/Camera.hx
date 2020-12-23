@@ -6,25 +6,31 @@ import iron.math.Vec4;
 import iron.math.Mat4;
 import arm.ui.UISidebar;
 import arm.util.ViewportUtil;
+import arm.Enums;
 
 class Camera {
 
 	public static var inst: Camera;
-	public static var dist = 0.0;
+	public var origins: Array<Vec4>;
 	public var views: Array<Mat4>;
 	var redraws = 0;
 	var first = true;
 	var dir = new Vec4();
-	var xvec = new Vec4();
-	var yvec = new Vec4();
 	var ease = 1.0;
 
 	public function new() {
 		inst = this;
 		var mouse = Input.getMouse();
 		var kb = Input.getKeyboard();
+		var camera = iron.Scene.active.camera;
 
 		iron.App.notifyOnUpdate(function() {
+
+			if (first) {
+				first = false;
+				reset();
+			}
+
 			if (Input.occupied ||
 				!App.uiEnabled ||
 				App.isDragging  ||
@@ -36,20 +42,15 @@ class Camera {
 				return;
 			}
 
-			var camera = iron.Scene.active.camera;
-
-			if (first) {
-				first = false;
-				reset();
-			}
-
-			var modif = kb.down("alt") || kb.down("shift") || kb.down("control") || Config.keymap.action_rotate == "middle";
+			var modifKey = kb.down("alt") || kb.down("shift") || kb.down("control");
+			var modif = modifKey || Config.keymap.action_rotate == "middle";
 			var controls = Context.cameraControls;
 			if (controls == ControlsOrbit) {
 				if (Operator.shortcut(Config.keymap.action_rotate, ShortcutDown) || (mouse.down("right") && !modif)) {
 					redraws = 2;
+					var dist = distance();
 					camera.transform.move(camera.lookWorld(), dist);
-					camera.transform.rotate(new iron.math.Vec4(0, 0, 1), -mouse.movementX / 100);
+					camera.transform.rotate(Vec4.zAxis(), -mouse.movementX / 100);
 					camera.transform.rotate(camera.rightWorld(), -mouse.movementY / 100);
 					if (camera.upWorld().z < 0) {
 						camera.transform.rotate(camera.rightWorld(), mouse.movementY / 100);
@@ -61,18 +62,16 @@ class Camera {
 
 				if (Operator.shortcut(Config.keymap.action_zoom, ShortcutDown)) {
 					redraws = 2;
-					var f = -mouse.movementY / 150;
-					f *= Config.raw.camera_speed;
+					var f = getDirectionToZoom() / 150;
+					f *= getCameraSpeed();
 					camera.transform.move(camera.look(), f);
-					dist -= f;
 				}
 
-				if (mouse.wheelDelta != 0 && !modif) {
+				if (mouse.wheelDelta != 0 && !modifKey) {
 					redraws = 2;
 					var f = mouse.wheelDelta * (-0.1);
-					f *= Config.raw.camera_speed;
+					f *= getCameraSpeed();
 					camera.transform.move(camera.look(), f);
-					dist -= f;
 				}
 
 				if (Operator.shortcut(Config.keymap.rotate_light, ShortcutDown)) {
@@ -92,7 +91,7 @@ class Camera {
 			else if (controls == ControlsRotate) {
 				if (Operator.shortcut(Config.keymap.action_rotate, ShortcutDown) || (mouse.down("right") && !modif)) {
 					redraws = 2;
-					var t = Context.object.transform;
+					var t = Context.mainObject().transform;
 					var up = t.up().normalize();
 					t.rotate(up, mouse.movementX / 100);
 					var right = camera.rightWorld().normalize();
@@ -107,15 +106,15 @@ class Camera {
 
 				if (Operator.shortcut(Config.keymap.action_zoom, ShortcutDown)) {
 					redraws = 2;
-					var f = -mouse.movementY / 150;
-					f *= Config.raw.camera_speed;
+					var f = getDirectionToZoom() / 150;
+					f *= getCameraSpeed();
 					camera.transform.move(camera.look(), f);
 				}
 
 				if (mouse.wheelDelta != 0) {
 					redraws = 2;
 					var f = mouse.wheelDelta * (-0.1);
-					f *= Config.raw.camera_speed;
+					f *= getCameraSpeed();
 					camera.transform.move(camera.look(), f);
 				}
 			}
@@ -171,10 +170,32 @@ class Camera {
 		});
 	}
 
-	public function reset() {
+	public function distance(): Float {
 		var camera = iron.Scene.active.camera;
-		dist = camera.transform.loc.length();
-		views = [camera.transform.local.clone(), camera.transform.local.clone()];
+		return Vec4.distance(origins[index()], camera.transform.loc);
+	}
+
+	public function index(): Int {
+		return Context.viewIndexLast > 0 ? 1 : 0;
+	}
+
+	function getCameraSpeed(): Float {
+		var sign = Config.raw.zoom_direction == ZoomVerticalInverted ||
+				   Config.raw.zoom_direction == ZoomHorizontalInverted ||
+				   Config.raw.zoom_direction == ZoomVerticalAndHorizontalInverted ? -1 : 1;
+		return Config.raw.camera_speed * sign;
+	}
+
+	public function reset(viewIndex = -1) {
+		var camera = iron.Scene.active.camera;
+		if (viewIndex == -1) {
+			origins = [new Vec4(0, 0, 0), new Vec4(0, 0, 0)];
+			views = [camera.transform.local.clone(), camera.transform.local.clone()];
+		}
+		else {
+			origins[viewIndex] = new Vec4(0, 0, 0);
+			views[viewIndex] = camera.transform.local.clone();
+		}
 	}
 
 	function panAction(modif: Bool) {
@@ -186,7 +207,18 @@ class Camera {
 			var right = camera.transform.right().normalize().mult(-mouse.movementX / 150);
 			camera.transform.loc.add(look);
 			camera.transform.loc.add(right);
+			origins[index()].add(look);
+			origins[index()].add(right);
 			camera.buildMatrix();
 		}
+	}
+
+	function getDirectionToZoom(): Float {
+		var mouse = Input.getMouse();
+		return Config.raw.zoom_direction == ZoomVertical ? -mouse.movementY :
+			   Config.raw.zoom_direction == ZoomVerticalInverted ? -mouse.movementY :
+			   Config.raw.zoom_direction == ZoomHorizontal ? mouse.movementX :
+			   Config.raw.zoom_direction == ZoomHorizontalInverted ? mouse.movementX :
+			   -(mouse.movementY - mouse.movementX);
 	}
 }

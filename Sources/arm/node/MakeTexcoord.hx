@@ -1,14 +1,14 @@
 package arm.node;
 
 import arm.ui.UISidebar;
-import arm.node.MaterialShader;
+import arm.shader.NodeShader;
 import arm.Enums;
 
 class MakeTexcoord {
 
-	public static function run(vert: MaterialShader, frag: MaterialShader) {
+	public static function run(vert: NodeShader, frag: NodeShader) {
 
-		var fillLayer = Context.layer.material_mask != null;
+		var fillLayer = Context.layer.fill_layer != null;
 		var uvType = fillLayer ? Context.layer.uvType : Context.brushPaint;
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 
@@ -18,14 +18,24 @@ class MakeTexcoord {
 			frag.write_attrib('vec2 uvsp = sp.xy;');
 
 			if (fillLayer) { // Decal layer
-				frag.write_attrib('uvsp.x *= aspectRatio;');
-				frag.write_attrib('uvsp.xy *= 4.0;');
-				//frag.write_attrib('if (uvsp.x < 0.0 || uvsp.y < 0.0 || uvsp.x > 1.0 || uvsp.y > 1.0) discard;');
+				frag.write_attrib('if (uvsp.x < 0.0 || uvsp.y < 0.0 || uvsp.x > 1.0 || uvsp.y > 1.0) discard;');
+
+				frag.n = true;
+				frag.add_uniform('vec3 decalLayerNor', '_decalLayerNor');
+				var angle = Context.brushAngleRejectDot;
+				frag.write('if (abs(dot(n, decalLayerNor) - 1.0) > $angle) discard;');
+
+				frag.wposition = true;
+				frag.add_uniform('vec3 decalLayerLoc', '_decalLayerLoc');
+				frag.add_uniform('float decalLayerDim', '_decalLayerDim');
+				frag.write_attrib('if (abs(dot(decalLayerNor, decalLayerLoc - wposition)) > decalLayerDim) discard;');
 			}
 			else if (decal) {
-				frag.write_attrib('uvsp -= inp.xy;');
+				frag.add_uniform('vec4 decalMask', '_decalMask');
+				frag.write_attrib('vec4 decalMaskLocal = decalMask;'); // TODO: spirv workaround
+				frag.write_attrib('uvsp -= decalMaskLocal.xy;');
 				frag.write_attrib('uvsp.x *= aspectRatio;');
-				frag.write_attrib('uvsp *= 0.21 / (brushRadius * 0.9);');
+				frag.write_attrib('uvsp *= 0.21 / (decalMaskLocal.w * 0.9);'); // Decal radius
 
 				if (Context.brushDirectional) {
 					frag.add_uniform('vec3 brushDirection', '_brushDirection');
@@ -33,7 +43,7 @@ class MakeTexcoord {
 					frag.write_attrib('uvsp = vec2(uvsp.x * brushDirection.x - uvsp.y * brushDirection.y, uvsp.x * brushDirection.y + uvsp.y * brushDirection.x);');
 				}
 				var angle = Context.brushAngle + Context.brushNodesAngle;
-				var uvAngle = Context.layer.material_mask != null ? Context.layer.angle : angle;
+				var uvAngle = Context.layer.fill_layer != null ? Context.layer.angle : angle;
 				if (uvAngle != 0.0) {
 					frag.add_uniform('vec2 brushAngle', '_brushAngle');
 					frag.write_attrib('uvsp = vec2(uvsp.x * brushAngle.x - uvsp.y * brushAngle.y, uvsp.x * brushAngle.y + uvsp.y * brushAngle.x);');
@@ -55,10 +65,10 @@ class MakeTexcoord {
 		else if (uvType == UVMap) { // TexCoords - uvmap
 			vert.add_uniform('float brushScale', '_brushScale');
 			vert.add_out('vec2 texCoord');
-			vert.write('texCoord = subtex * brushScale;');
+			vert.write('texCoord = tex * brushScale;');
 
 			var angle = Context.brushAngle + Context.brushNodesAngle;
-			var uvAngle = Context.layer.material_mask != null ? Context.layer.angle : angle;
+			var uvAngle = Context.layer.fill_layer != null ? Context.layer.angle : angle;
 			if (uvAngle > 0.0) {
 				vert.add_uniform('vec2 brushAngle', '_brushAngle');
 				vert.write('texCoord = vec2(texCoord.x * brushAngle.x - texCoord.y * brushAngle.y, texCoord.x * brushAngle.y + texCoord.y * brushAngle.x);');

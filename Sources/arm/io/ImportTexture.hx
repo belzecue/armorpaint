@@ -10,7 +10,7 @@ class ImportTexture {
 
 	public static function run(path: String) {
 		if (!Path.isTexture(path)) {
-			Log.error(Strings.error1);
+			Log.error(Strings.error1());
 			return;
 		}
 
@@ -19,10 +19,12 @@ class ImportTexture {
 				// Set envmap
 				if (path.toLowerCase().endsWith(".hdr")) {
 					Data.getImage(path, function(image: kha.Image) {
-						ImportEnvmap.run(path, image);
+						App.notifyOnNextFrame(function() { // Make sure file browser process did finish
+							ImportEnvmap.run(path, image);
+						});
 					});
 				}
-				Log.info(Strings.info0);
+				Log.info(Strings.info0());
 				return;
 			}
 		}
@@ -44,7 +46,9 @@ class ImportTexture {
 
 			// Set envmap
 			if (path.toLowerCase().endsWith(".hdr")) {
-				ImportEnvmap.run(path, image);
+				App.notifyOnNextFrame(function() { // Make sure file browser process did finish
+					ImportEnvmap.run(path, image);
+				});
 			}
 		});
 	}

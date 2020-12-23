@@ -25,7 +25,6 @@ typedef TConfig = {
 	@:optional var rp_gi: Null<Bool>;
 	@:optional var rp_vignette: Null<Float>;
 	// Application
-	#if arm_painter
 	@:optional var version: String; // ArmorPaint version
 	@:optional var sha: String; // Commit id
 	@:optional var recent_projects: Array<String>; // Recently opened projects
@@ -42,9 +41,13 @@ typedef TConfig = {
 	@:optional var material_live: Null<Bool>;
 	@:optional var brush_live: Null<Bool>;
 	@:optional var brush_3d: Null<Bool>;
+	@:optional var node_preview: Null<Bool>;
 	@:optional var camera_speed: Null<Float>;
+	@:optional var zoom_direction: Null<Int>;
 	@:optional var displace_strength: Null<Float>;
-	@:optional var native_file_browser: Null<Bool>;
 	@:optional var show_asset_names: Null<Bool>;
-	#end
+	@:optional var layout: Array<Int>;
+	@:optional var workspace: Null<Int>;
+	@:optional var dilate: Null<Int>;
+	@:optional var dilate_radius: Null<Int>;
 }

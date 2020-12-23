@@ -2,20 +2,21 @@ package arm.ui;
 
 import zui.Zui;
 import zui.Id;
+import zui.Nodes;
 import iron.system.Time;
 import iron.system.Input;
 import arm.data.LayerSlot;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.util.UVUtil;
+import arm.sys.Path;
+import arm.Enums;
 
 class TabLayers {
-
-	public static var dragDestination = 1;
 
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UISidebar.inst.htab, tr("Layers"))) {
+		if (ui.tab(UISidebar.inst.htab0, tr("Layers"))) {
 
 			ui.beginSticky();
 
@@ -41,6 +42,7 @@ class TabLayers {
 			var ar = [tr("All")];
 			for (p in Project.paintObjects) ar.push(p.name);
 			var filterHandle = Id.handle();
+			filterHandle.position = Context.layerFilter;
 			Context.layerFilter = ui.combo(filterHandle, ar, tr("Filter"), false, Left, 16);
 			if (filterHandle.changed) {
 				for (p in Project.paintObjects) {
@@ -49,6 +51,9 @@ class TabLayers {
 				}
 				UVUtil.uvmapCached = false;
 				Context.ddirty = 2;
+				#if (kha_direct3d12 || kha_vulkan)
+				arm.render.RenderPathRaytrace.ready = false;
+				#end
 			}
 
 			ui.endSticky();
@@ -70,7 +75,7 @@ class TabLayers {
 				var checkw = (ui._windowW / 100 * 8) / ui.SCALE();
 
 				if (l.show_panel && l.getChildren() == null) {
-					var mult = l.material_mask != null ? 2 : 1;
+					var mult = l.fill_layer != null ? 2 : 1;
 					var ph = (step + off) * mult;
 					ui.fill(checkw, step * 2, (ui._windowW / ui.SCALE() - 2) - checkw, ph, ui.t.SEPARATOR_COL);
 				}
@@ -88,10 +93,16 @@ class TabLayers {
 				var mouse = Input.getMouse();
 				var mx = mouse.x;
 				var my = mouse.y;
-				var inLayers = mx > UISidebar.inst.tabx && my < UISidebar.inst.tabh;
-				if (App.isDragging && App.dragLayer != null && my > ui._y - step && my < ui._y + step) {
-					ui.fill(checkw, 0, (ui._windowW / ui.SCALE() - 2) - checkw, 2 * ui.SCALE(), ui.t.HIGHLIGHT_COL);
-					dragDestination = Project.layers.indexOf(App.dragLayer) < i ? i : i + 1;
+				var inLayers = mx > UISidebar.inst.tabx && my < Config.raw.layout[LayoutSidebarH0];
+				if (App.isDragging && App.dragLayer != null && inLayers) {
+					if (my > ui._y - step && my < ui._y + step) {
+						ui.fill(checkw, 0, (ui._windowW / ui.SCALE() - 2) - checkw, 2 * ui.SCALE(), ui.t.HIGHLIGHT_COL);
+						Context.dragDestination = Project.layers.indexOf(App.dragLayer) < i ? i : i + 1;
+					}
+					else if (i == 0 && my > ui._y + step) {
+						ui.fill(checkw, step * 2, (ui._windowW / ui.SCALE() - 2) - checkw, 2 * ui.SCALE(), ui.t.HIGHLIGHT_COL);
+						Context.dragDestination = 0;
+					}
 				}
 
 				if (l.texpaint_mask != null) {
@@ -113,7 +124,7 @@ class TabLayers {
 
 				if (ui.image(icons, col, null, r.x, r.y, r.w, r.h) == Released) {
 					l.visible = !l.visible;
-					MaterialParser.parseMeshMaterial();
+					MakeMaterial.parseMeshMaterial();
 				}
 				ui._x -= 2;
 				ui._y -= 3;
@@ -122,7 +133,7 @@ class TabLayers {
 				var contextMenu = false;
 
 				#if kha_opengl
-				ui.imageInvertY = l.material_mask != null;
+				ui.imageInvertY = l.fill_layer != null;
 				#end
 
 				var uix = ui._x;
@@ -135,8 +146,8 @@ class TabLayers {
 				var iconH = (ui.ELEMENT_H() - 3) * 2;
 
 				if (l.getChildren() == null) {
-					var icon = l.material_mask == null ? l.texpaint_preview : l.material_mask.imageIcon;
-					if (l.material_mask == null) {
+					var icon = l.fill_layer == null ? l.texpaint_preview : l.fill_layer.imageIcon;
+					if (l.fill_layer == null) {
 						// Checker
 						var r = Res.tile50(icons, 4, 1);
 						var _x = ui._x;
@@ -149,7 +160,9 @@ class TabLayers {
 					state = ui.image(icon, 0xffffffff, iconH);
 				}
 				else { // Group
-					var folder = Res.tile50(icons, 2, 1);
+					var folderClosed = Res.tile50(icons, 2, 1);
+					var folderOpen = Res.tile50(icons, 8, 1);
+					var folder = l.show_panel ? folderOpen : folderClosed;
 					state = ui.image(icons, ui.t.LABEL_COL - 0x00202020, iconH, folder.x, folder.y, folder.w, folder.h);
 				}
 
@@ -170,12 +183,10 @@ class TabLayers {
 					Context.setLayer(l);
 					if (Time.time() - Context.selectTime < 0.25) UISidebar.inst.show2DView(View2DLayer);
 					Context.selectTime = Time.time();
-					if (l.getChildren() == null) {
-						var mouse = Input.getMouse();
-						App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
-						App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
-						App.dragLayer = Context.layer;
-					}
+					var mouse = Input.getMouse();
+					App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
+					App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
+					App.dragLayer = Context.layer;
 				}
 
 				if (l.texpaint_mask != null) {
@@ -192,13 +203,19 @@ class TabLayers {
 					// ui._x = _x;
 					// ui._y = _y;
 
-					ui.g.pipeline = UIView2D.inst.pipe;
-					#if kha_opengl
-					ui.currentWindow.texture.g4.setPipeline(UIView2D.inst.pipe);
-					#end
-					ui.currentWindow.texture.g4.setInt(UIView2D.inst.channelLocation, 1);
-					var state = ui.image(l.texpaint_mask_preview, 0xffffffff, (ui.ELEMENT_H() - 3) * 2);
-					ui.g.pipeline = null;
+					var state = State.Idle;
+					if (l.fill_mask != null) {
+						state = ui.image(l.fill_mask.imageIcon, 0xffffffff, (ui.ELEMENT_H() - 3) * 2);
+					}
+					else {
+						ui.g.pipeline = UIView2D.pipe;
+						#if kha_opengl
+						ui.currentWindow.texture.g4.setPipeline(UIView2D.pipe);
+						#end
+						ui.currentWindow.texture.g4.setInt(UIView2D.channelLocation, 1);
+						state = ui.image(l.texpaint_mask_preview, 0xffffffff, (ui.ELEMENT_H() - 3) * 2);
+						ui.g.pipeline = null;
+					}
 
 					ui._x -= Std.int(4 * ui.SCALE());
 					ui._y -= 3;
@@ -206,54 +223,72 @@ class TabLayers {
 						ui.tooltipImage(l.texpaint_mask_preview);
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
+						var add = l.fill_mask == null ? 2 : 0;
 						UIMenu.draw(function(ui: Zui) {
 							ui.text('${l.name} ' + tr("Mask"), Right, ui.t.HIGHLIGHT_COL);
+							if (ui.button(tr("Export"), Left)) {
+								UIFiles.show("png", true, function(path: String) {
+									var f = UIFiles.filename;
+									if (f == "") f = tr("untitled");
+									if (!f.endsWith(".png")) f += ".png";
+									var out = new haxe.io.BytesOutput();
+									var writer = new arm.format.PngWriter(out);
+									var data = arm.format.PngTools.buildGrey(l.texpaint_mask.width, l.texpaint_mask.height, l.texpaint_mask.getPixels());
+									writer.write(data);
+									Krom.fileSaveBytes(path + Path.sep + f, out.getBytes().getData());
+								});
+							}
+							if (l.fill_mask == null && ui.button(tr("To Fill Mask"), Left)) {
+								function _init() {
+									History.toFillMask();
+									l.toFillMask();
+								}
+								iron.App.notifyOnInit(_init);
+							}
+							if (l.fill_mask != null && ui.button(tr("To Paint Mask"), Left)) {
+								function _init() {
+									History.toPaintMask();
+									l.toPaintMask();
+								}
+								iron.App.notifyOnInit(_init);
+							}
+							if (l.fill_mask != null && ui.button(tr("Select Material"), Left)) {
+								Context.setMaterial(l.fill_mask);
+							}
 							if (ui.button(tr("Delete"), Left)) {
 								Context.setLayer(l, true);
 								History.deleteMask();
 								l.deleteMask();
 								Context.setLayer(l, false);
 							}
-							if (ui.button(tr("Clear to Black"), Left)) {
-								function clear(g: kha.graphics4.Graphics) {
-									g.end();
+							if (l.fill_mask == null && ui.button(tr("Clear to Black"), Left)) {
+								function _init() {
 									l.clearMask(0x00000000);
-									g.begin();
-									iron.App.removeRender(clear);
 								}
-								iron.App.notifyOnRender(clear);
+								iron.App.notifyOnInit(_init);
 							}
-							if (ui.button(tr("Clear to White"), Left)) {
-								function clear(g: kha.graphics4.Graphics) {
-									g.end();
+							if (l.fill_mask == null && ui.button(tr("Clear to White"), Left)) {
+								function _init() {
 									l.clearMask(0xffffffff);
-									g.begin();
-									iron.App.removeRender(clear);
 								}
-								iron.App.notifyOnRender(clear);
+								iron.App.notifyOnInit(_init);
 							}
-							if (ui.button(tr("Invert"), Left)) {
-								function invert(g: kha.graphics4.Graphics) {
-									g.end();
+							if (l.fill_mask == null && ui.button(tr("Invert"), Left)) {
+								function _init() {
 									l.invertMask();
-									g.begin();
-									iron.App.removeRender(invert);
 								}
-								iron.App.notifyOnRender(invert);
+								iron.App.notifyOnInit(_init);
 							}
 							if (ui.button(tr("Apply"), Left)) {
-								function makeApply(g: kha.graphics4.Graphics) {
-									g.end();
+								function _init() {
 									Context.setLayer(l);
 									History.applyMask();
 									l.applyMask();
-									MaterialParser.parseMeshMaterial();
-									g.begin();
-									iron.App.removeRender(makeApply);
+									MakeMaterial.parseMeshMaterial();
 								}
-								iron.App.notifyOnRender(makeApply);
+								iron.App.notifyOnInit(_init);
 							}
-						}, 6);
+						}, 6 + add);
 					}
 					if (state == State.Started) {
 						Context.setLayer(l, true);
@@ -276,6 +311,10 @@ class TabLayers {
 					Context.setLayer(l);
 					if (Time.time() - Context.selectTime < 0.25) UISidebar.inst.show2DView(View2DLayer);
 					Context.selectTime = Time.time();
+					var mouse = Input.getMouse();
+					App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
+					App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
+					App.dragLayer = Context.layer;
 				}
 
 				if (ui.isHovered && ui.inputReleasedR) {
@@ -284,37 +323,35 @@ class TabLayers {
 
 				if (contextMenu) {
 
-					var add = l.material_mask != null ? 1 : 0;
-					var menuElements = l.getChildren() != null ? 6 : (21 + add);
+					var add = l.fill_layer != null ? 1 : 0;
+					var menuElements = l.getChildren() != null ? 6 : (19 + add);
 
 					UIMenu.draw(function(ui: Zui) {
 						ui.text(l.name, Right, ui.t.HIGHLIGHT_COL);
 
-						if (ui.button(tr("Export"), Left)) BoxExport.showTextures();
+						if (ui.button(tr("Export"), Left)) {
+							Context.layersExport = ExportSelected;
+							BoxExport.showTextures();
+						}
 
-						if (l.getChildren() == null && l.material_mask == null && ui.button(tr("To Fill Layer"), Left)) {
-							function makeFill(g: kha.graphics4.Graphics) {
-								g.end();
+						if (l.getChildren() == null && l.fill_layer == null && ui.button(tr("To Fill Layer"), Left)) {
+							function _init() {
 								History.toFillLayer();
 								l.toFillLayer();
-								g.begin();
-								iron.App.removeRender(makeFill);
 							}
-							iron.App.notifyOnRender(makeFill);
+							iron.App.notifyOnInit(_init);
 						}
-						if (l.getChildren() == null && l.material_mask != null && ui.button(tr("To Paint Layer"), Left)) {
-							function makePaint(g: kha.graphics4.Graphics) {
-								g.end();
+						if (l.getChildren() == null && l.fill_layer != null && ui.button(tr("To Paint Layer"), Left)) {
+							function _init() {
 								History.toPaintLayer();
 								l.toPaintLayer();
-								g.begin();
-								iron.App.removeRender(makePaint);
 							}
-							iron.App.notifyOnRender(makePaint);
+							iron.App.notifyOnInit(_init);
 						}
 
 						if (l.getChildren() == null && ui.button(tr("To Group"), Left)) {
 							if (l.parent == null) { // 1-level nesting only
+								var pointers = initLayerMap();
 								Context.setLayer(l);
 								var group = Layers.newGroup();
 								Project.layers.remove(group);
@@ -323,16 +360,22 @@ class TabLayers {
 								l.parent = group;
 								Context.setLayer(l);
 								// History.newGroup();
+								for (m in Project.materials) remapLayerPointers(m.canvas.nodes, fillLayerMap(pointers));
 							}
 						}
 						if (ui.button(tr("Delete"), Left)) {
 							if (arm.Project.layers.length > 1) {
+								var pointers = initLayerMap();
 								Context.layer = l;
 								if (l.getChildren() == null) {
 									History.deleteLayer();
 								}
 								else {
-									// History.deleteGroup();
+									for (c in l.getChildren()) {
+										Context.layer = c;
+										History.deleteLayer();
+										c.delete();
+									}
 								}
 								l.delete();
 
@@ -341,112 +384,71 @@ class TabLayers {
 									l.parent.delete();
 								}
 								Context.ddirty = 2;
+								for (m in Project.materials) remapLayerPointers(m.canvas.nodes, fillLayerMap(pointers));
 							}
 						}
 						if (ui.button(tr("Clear"), Left)) {
-							function clear(g: kha.graphics4.Graphics) {
-								g.end();
-								l.clearLayer();
-								g.begin();
-								iron.App.removeRender(clear);
-							}
-							iron.App.notifyOnRender(clear);
-						}
-						if (ui.button(tr("Move Up"), Left)) {
-							if (i < Project.layers.length - 1) {
-
-								var isGroup = Project.layers[i].getChildren() != null;
-								if (isGroup) {
-									if (Project.layers[i + 1].parent != null) return; // Move over group
+							Context.setLayer(l);
+							function _init() {
+								if (l.getChildren() == null) {
+									History.clearLayer();
+									l.clearLayer();
 								}
-
-								Context.setLayer(l);
-								History.orderLayers(i + 1);
-								var target = Project.layers[i + 1];
-								Project.layers[i + 1] = Project.layers[i];
-								Project.layers[i] = target;
-								UISidebar.inst.hwnd.redraws = 2;
-
-								// Move layer
-								if (!isGroup) {
-									Project.layers[i + 1].parent = Project.layers[i].parent;
-
-									// Remove empty group
-									if (Project.layers[i].texpaint == null && Project.layers[i].getChildren() == null) {
-										Project.layers[i].delete();
-									}
-								}
-								// Move group
 								else {
-									var children = Project.layers[i + 1].getChildren();
-									var j = i;
-									for (c in children) {
-										var target = Project.layers[j - 1];
-										Project.layers[j - 1] = Project.layers[j];
-										Project.layers[j] = target;
-										j--;
+									for (c in l.getChildren()) {
+										Context.layer = c;
+										History.clearLayer();
+										c.clearLayer();
 									}
+									Context.layer = l;
 								}
 							}
-						}
-						if (ui.button(tr("Move Down"), Left)) {
-							if (i > 0) {
-
-								var isGroup = l.getChildren() != null;
-								if (isGroup) {
-									var children = l.getChildren();
-									if (i - children.length <= 1) return;
-									if (Project.layers[i - children.length - 2].parent != null) return; // Move over group
-									for (c in children) {
-										var k = Project.layers.indexOf(c);
-										var target = Project.layers[k - 1];
-										Project.layers[k - 1] = Project.layers[k];
-										Project.layers[k] = target;
-									}
-								}
-
-								Context.setLayer(l);
-								History.orderLayers(i - 1);
-								var target = Project.layers[i - 1];
-								Project.layers[i - 1] = Project.layers[i];
-								Project.layers[i] = target;
-								UISidebar.inst.hwnd.redraws = 2;
-
-								// Move layer
-								if (!isGroup) {
-									Project.layers[i - 1].parent = Project.layers[i].parent;
-
-									// Move to group
-									if (Project.layers[i].getChildren() != null) {
-										Project.layers[i - 1].parent = Project.layers[i];
-									}
-
-									// Remove empty group
-									if (Project.layers.length > i + 1 && Project.layers[i + 1].texpaint == null && Project.layers[i + 1].getChildren() == null) {
-										Project.layers[i + 1].delete();
-									}
-								}
-							}
+							iron.App.notifyOnInit(_init);
 						}
 						if (l.getChildren() != null && ui.button(tr("Merge Group"), Left)) {
-
+							function _init() {
+								var children = l.getChildren();
+								for (i in 0...children.length - 1) {
+									Context.setLayer(children[children.length - 1 - i]);
+									History.mergeLayers();
+									Layers.mergeDown();
+								}
+								children[0].parent = null;
+								children[0].name = l.name;
+								l.delete();
+							}
+							iron.App.notifyOnInit(_init);
 						}
 						if (l.getChildren() == null && ui.button(tr("Merge Down"), Left)) {
 							Context.setLayer(l);
-							iron.App.notifyOnRender(History.mergeLayers);
-							iron.App.notifyOnRender(Layers.mergeSelectedLayer);
+							iron.App.notifyOnInit(History.mergeLayers);
+							iron.App.notifyOnInit(Layers.mergeDown);
 						}
-						if (l.getChildren() == null && ui.button(tr("Duplicate"), Left)) {
-							Context.setLayer(l);
-							History.duplicateLayer();
-							function makeDupli(g: kha.graphics4.Graphics) {
-								g.end();
-								l = l.duplicate();
-								Context.setLayer(l);
-								g.begin();
-								iron.App.removeRender(makeDupli);
+						if (ui.button(tr("Duplicate"), Left)) {
+							function _init() {
+								if (l.getChildren() == null) {
+									Context.setLayer(l);
+									History.duplicateLayer();
+									l = l.duplicate();
+									Context.setLayer(l);
+								}
+								else {
+									var group = Layers.newGroup();
+									Project.layers.remove(group);
+									Project.layers.insert(Project.layers.indexOf(l) + 1, group);
+									// group.show_panel = true;
+									for (c in l.getChildren()) {
+										Context.setLayer(c);
+										History.duplicateLayer();
+										c = c.duplicate();
+										c.parent = group;
+										Project.layers.remove(c);
+										Project.layers.insert(Project.layers.indexOf(group), c);
+									}
+									Context.setLayer(group);
+								}
 							}
-							iron.App.notifyOnRender(makeDupli);
+							iron.App.notifyOnInit(_init);
 						}
 						if (l.getChildren() == null && ui.button(tr("Black Mask"), Left)) {
 							l.createMask(0x00000000);
@@ -461,10 +463,8 @@ class TabLayers {
 							History.newMask();
 						}
 
-						if (l.material_mask != null) {
-							if (ui.button(tr("Select Material"), Left)) {
-								Context.setMaterial(l.material_mask);
-							}
+						if (l.fill_layer != null && ui.button(tr("Select Material"), Left)) {
+							Context.setMaterial(l.fill_layer);
 						}
 
 						if (l.getChildren() == null) {
@@ -504,7 +504,7 @@ class TabLayers {
 								heightHandle.changed ||
 								emisHandle.changed ||
 								subsHandle.changed) {
-								MaterialParser.parseMeshMaterial();
+								MakeMaterial.parseMeshMaterial();
 								UIMenu.keepOpen = true;
 							}
 						}
@@ -541,7 +541,7 @@ class TabLayers {
 						Context.setLayer(l);
 						History.layerBlending();
 						l.blending = blendingHandle.position;
-						MaterialParser.parseMeshMaterial();
+						MakeMaterial.parseMeshMaterial();
 					}
 				}
 
@@ -569,14 +569,13 @@ class TabLayers {
 					l.objectMask = ui.combo(objectHandle, ar, tr("Object"), false, Left, 16);
 					if (objectHandle.changed) {
 						Context.setLayer(l);
-						MaterialParser.parseMeshMaterial();
-						if (l.material_mask != null) { // Fill layer
-							iron.App.notifyOnRender(l.clear);
-							function updateFillLayers(_) {
-								Layers.updateFillLayers(4);
-								iron.App.removeRender(updateFillLayers);
+						MakeMaterial.parseMeshMaterial();
+						if (l.fill_layer != null) { // Fill layer
+							iron.App.notifyOnInit(l.clear);
+							function _init() {
+								Layers.updateFillLayers();
 							}
-							iron.App.notifyOnRender(updateFillLayers);
+							iron.App.notifyOnInit(_init);
 						}
 						else {
 							Layers.setObjectMask();
@@ -599,26 +598,27 @@ class TabLayers {
 						Context.setLayer(l);
 						if (ui.inputStarted) History.layerOpacity();
 						l.maskOpacity = layerOpacHandle.value;
-						MaterialParser.parseMeshMaterial();
+						MakeMaterial.parseMeshMaterial();
 					}
 
 					ui.combo(App.resHandle, ["128", "256", "512", "1K", "2K", "4K", "8K", "16K"], tr("Res"), true);
 					if (App.resHandle.changed) {
-						iron.App.notifyOnRender(Layers.resizeLayers);
+						iron.App.notifyOnInit(Layers.resizeLayers);
 						UVUtil.uvmap = null;
 						UVUtil.uvmapCached = false;
 						UVUtil.trianglemap = null;
 						UVUtil.trianglemapCached = false;
+						UVUtil.dilatemapCached = false;
 						#if (kha_direct3d12 || kha_vulkan)
 						arm.render.RenderPathRaytrace.ready = false;
 						#end
 					}
 					ui.combo(App.bitsHandle, ["8bit", "16bit", "32bit"], tr("Color"), true);
 					if (App.bitsHandle.changed) {
-						iron.App.notifyOnRender(Layers.setLayerBits);
+						iron.App.notifyOnInit(Layers.setLayerBits);
 					}
 
-					if (l.material_mask != null) {
+					if (l.fill_layer != null) {
 						ui.row([8 / 100, 92 / 100 / 3, 92 / 100 / 3, 92 / 100 / 3]);
 						@:privateAccess ui.endElement();
 
@@ -626,29 +626,38 @@ class TabLayers {
 						scaleHandle.value = l.scale;
 						l.scale = ui.slider(scaleHandle, tr("UV Scale"), 0.0, 5.0, true);
 						if (scaleHandle.changed) {
-							Context.setMaterial(l.material_mask);
+							Context.setMaterial(l.fill_layer);
 							Context.setLayer(l);
-							Layers.updateFillLayers();
+							function _init() {
+								Layers.updateFillLayers();
+							}
+							iron.App.notifyOnInit(_init);
 						}
 
 						var angleHandle = Id.handle().nest(l.id);
 						angleHandle.value = l.angle;
 						l.angle = ui.slider(angleHandle, tr("Angle"), 0.0, 360, true, 1);
 						if (angleHandle.changed) {
-							Context.setMaterial(l.material_mask);
+							Context.setMaterial(l.fill_layer);
 							Context.setLayer(l);
-							MaterialParser.parsePaintMaterial();
-							Layers.updateFillLayers();
+							MakeMaterial.parsePaintMaterial();
+							function _init() {
+								Layers.updateFillLayers();
+							}
+							iron.App.notifyOnInit(_init);
 						}
 
 						var uvTypeHandle = Id.handle().nest(l.id);
 						uvTypeHandle.position = l.uvType;
 						l.uvType = ui.combo(uvTypeHandle, [tr("UV Map"), tr("Triplanar"), tr("Project")], tr("TexCoord"));
 						if (uvTypeHandle.changed) {
-							Context.setMaterial(l.material_mask);
+							Context.setMaterial(l.fill_layer);
 							Context.setLayer(l);
-							MaterialParser.parsePaintMaterial();
-							Layers.updateFillLayers();
+							MakeMaterial.parsePaintMaterial();
+							function _init() {
+								Layers.updateFillLayers();
+							}
+							iron.App.notifyOnInit(_init);
 						}
 					}
 				}
@@ -661,5 +670,28 @@ class TabLayers {
 				drawList(l, j);
 			}
 		}
+	}
+
+	public static function remapLayerPointers(nodes: Array<TNode>, pointerMap: Map<Int, Int>) {
+		for (n in nodes) {
+			if (n.type == "LAYER" || n.type == "LAYER_MASK") {
+				var i = n.buttons[0].default_value;
+				if (pointerMap.exists(i)) {
+					n.buttons[0].default_value = pointerMap.get(i);
+				}
+			}
+		}
+	}
+
+	public static function initLayerMap(): Map<LayerSlot, Int> {
+		var res: Map<LayerSlot, Int> = [];
+		for (i in 0...Project.layers.length) res.set(Project.layers[i], i);
+		return res;
+	}
+
+	public static function fillLayerMap(map: Map<LayerSlot, Int>): Map<Int, Int> {
+		var res: Map<Int, Int> = [];
+		for (l in map.keys()) res.set(map.get(l), Project.layers.indexOf(l) > -1 ? Project.layers.indexOf(l) : 9999);
+		return res;
 	}
 }

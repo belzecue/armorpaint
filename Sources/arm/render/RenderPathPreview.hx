@@ -77,8 +77,8 @@ class RenderPathPreview {
 		}
 
 		//
-		// path.loadShader("deferred_light/deferred_light/deferred_light");
-		// path.loadShader("world_pass/world_pass/world_pass");
+		// path.loadShader("shader_datas/deferred_light/deferred_light");
+		// path.loadShader("shader_datas/world_pass/world_pass");
 		// path.loadShader("shader_datas/compositor_pass/compositor_pass");
 		// path.loadShader("shader_datas/supersample_resolve/supersample_resolve");
 		//
@@ -88,7 +88,7 @@ class RenderPathPreview {
 		path.setTarget("mgbuffer2");
 		path.clearTarget(0xff000000);
 
-		#if (arm_world || kha_metal)
+		#if (kha_metal)
 		var clearColor = 0xffffffff;
 		#else
 		var clearColor: Null<Int> = null;
@@ -109,16 +109,14 @@ class RenderPathPreview {
 		{
 			path.bindTarget("empty_white", "ssaotex");
 		}
-		path.drawShader("deferred_light/deferred_light/deferred_light");
+		path.drawShader("shader_datas/deferred_light/deferred_light");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("mtex", "mgbuffer0"); // Bind depth for world pass
 		#end
 
 		path.setTarget("mtex"); // Re-binds depth
-		#if (!arm_world)
-		path.drawSkydome("world_pass/world_pass/world_pass");
-		#end
+		path.drawSkydome("shader_datas/world_pass/world_pass");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("mtex", "mgbuffer1"); // Unbind depth
@@ -132,11 +130,6 @@ class RenderPathPreview {
 		path.setTarget(framebuffer);
 
 		path.bindTarget("mtex", "tex");
-		#if rp_compositordepth
-		{
-			path.bindTarget("_mmain", "gbufferD");
-		}
-		#end
 		path.drawShader("shader_datas/compositor_pass/compositor_pass");
 
 		path.setTarget("texpreview_icon");
@@ -147,8 +140,15 @@ class RenderPathPreview {
 	public static function commandsDecal() {
 		path.setTarget("gbuffer2");
 		path.clearTarget(0xff000000);
+
+		#if (kha_metal)
+		var clearColor = 0xffffffff;
+		#else
+		var clearColor: Null<Int> = null;
+		#end
+
 		path.setTarget("gbuffer0");
-		path.clearTarget(null, 1.0);
+		path.clearTarget(clearColor, 1.0);
 		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
 		path.drawMeshes("mesh");
 
@@ -162,14 +162,14 @@ class RenderPathPreview {
 		{
 			path.bindTarget("empty_white", "ssaotex");
 		}
-		path.drawShader("deferred_light/deferred_light/deferred_light");
+		path.drawShader("shader_datas/deferred_light/deferred_light");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("tex", "gbuffer0"); // Bind depth for world pass
 		#end
 
 		path.setTarget("tex");
-		path.drawSkydome("world_pass/world_pass/world_pass");
+		path.drawSkydome("shader_datas/world_pass/world_pass");
 
 		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 		path.setDepthFrom("tex", "gbuffer1"); // Unbind depth
@@ -181,11 +181,6 @@ class RenderPathPreview {
 		path.setTarget(framebuffer);
 
 		path.bindTarget("tex", "tex");
-		#if rp_compositordepth
-		{
-			path.bindTarget("_main", "gbufferD");
-		}
-		#end
 		path.drawShader("shader_datas/compositor_pass/compositor_pass");
 	}
 }

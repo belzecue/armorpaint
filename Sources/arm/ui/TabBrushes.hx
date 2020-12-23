@@ -4,10 +4,11 @@ import haxe.Json;
 import iron.system.Time;
 import zui.Zui;
 import arm.data.BrushSlot;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.util.RenderUtil;
 import arm.io.ExportArm;
 import arm.sys.Path;
+import arm.Enums;
 
 class TabBrushes {
 
@@ -20,7 +21,7 @@ class TabBrushes {
 			if (ui.button(tr("New"))) {
 				Context.brush = new BrushSlot();
 				Project.brushes.push(Context.brush);
-				MaterialParser.parseBrush();
+				MakeMaterial.parseBrush();
 				Context.parseBrushInputs();
 				UINodes.inst.hwnd.redraws = 2;
 			}
@@ -34,7 +35,7 @@ class TabBrushes {
 			ui.separator(3, false);
 
 			var slotw = Std.int(51 * ui.SCALE());
-			var num = Std.int(UISidebar.inst.windowW / slotw);
+			var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
 
 			for (row in 0...Std.int(Math.ceil(Project.brushes.length / num))) {
 				ui.row([for (i in 0...num) 1 / num]);
@@ -92,8 +93,7 @@ class TabBrushes {
 							}
 
 							if (ui.button(tr("Duplicate"), Left)) {
-								function dupliBrush(_) {
-									iron.App.removeRender(dupliBrush);
+								function _init() {
 									Context.brush = new BrushSlot();
 									Project.brushes.push(Context.brush);
 									var cloned = Json.parse(Json.stringify(Project.brushes[i].canvas));
@@ -101,7 +101,7 @@ class TabBrushes {
 									Context.setBrush(Context.brush);
 									RenderUtil.makeBrushPreview();
 								}
-								iron.App.notifyOnRender(dupliBrush);
+								iron.App.notifyOnInit(_init);
 							}
 
 							if (Project.brushes.length > 1 && ui.button(tr("Delete"), Left)) {

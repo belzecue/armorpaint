@@ -1,5 +1,5 @@
 
-Module = {}
+let Module = {};
 Module["instantiateWasm"] = function(imports, successCallback) {
 	let wasmbin = Krom.loadBlob("data/plugins/import_svg.wasm");
 	let module = new WebAssembly.Module(wasmbin);
@@ -34,7 +34,7 @@ let import_svg = function(path, done) {
 		let w = a._get_pixels_w();
 		let h = a._get_pixels_h();
 		let pixels = r.buffer.slice(a._get_pixels(), a._get_pixels() + w * h * 4);
-		let image = arm.Image.fromBytes(arm.Bytes.ofData(pixels), w, h);
+		let image = core.Image.fromBytes(core.Bytes.ofData(pixels), w, h);
 		done(image);
 
 		a._destroy();

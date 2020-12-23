@@ -7,21 +7,20 @@ import zui.Zui;
 import zui.Id;
 import zui.Nodes;
 import iron.system.Input;
-import arm.node.NodesMaterial;
+import arm.shader.NodesMaterial;
 import arm.node.NodesBrush;
-import arm.node.MaterialParser;
+import arm.node.MakeMaterial;
 import arm.util.RenderUtil;
 import arm.ui.UIHeader;
 import arm.Enums;
 
 @:access(zui.Zui)
+@:access(zui.Nodes)
 class UINodes {
 
 	public static var inst: UINodes;
 
 	public var show = false;
-	public var defaultWindowW = 0;
-	public var defaultWindowH = 0;
 	public var wx: Int;
 	public var wy: Int;
 	public var ww: Int;
@@ -48,6 +47,7 @@ class UINodes {
 	var nodeSearchOffset = 0;
 	var nodeSearchLast = "";
 	var lastCanvas: TNodeCanvas;
+	var lastNodeSelected: TNode = null;
 
 	public var grid: Image = null;
 	public var hwnd = Id.handle();
@@ -66,19 +66,36 @@ class UINodes {
 
 	function onLinkDrag(linkDrag: TNodeLink, isNewLink: Bool) {
 		if (isNewLink) {
-			nodeSearch(-1, -1, function() {
-				var n = getNodes().nodesSelected[0];
-				if (linkDrag.to_id == -1 && n.inputs.length > 0) {
-					linkDrag.to_id = n.id;
-					linkDrag.to_socket = 0;
-					getCanvas().links.push(linkDrag);
-				}
-				else if (linkDrag.from_id == -1 && n.outputs.length > 0) {
-					linkDrag.from_id = n.id;
-					linkDrag.from_socket = 0;
-					getCanvas().links.push(linkDrag);
-				}
-			});
+			var nodes = getNodes();
+			var node = nodes.getNode(getCanvas().nodes, linkDrag.from_id > -1 ? linkDrag.from_id : linkDrag.to_id);
+			var linkX = ui._windowX + nodes.NODE_X(node);
+			var linkY = ui._windowY + nodes.NODE_Y(node);
+			if (linkDrag.from_id > -1) {
+				linkX += nodes.NODE_W();
+				linkY += nodes.SOCKET_Y(linkDrag.from_socket);
+			}
+			else {
+				linkY += nodes.SOCKET_Y(linkDrag.to_socket + node.outputs.length) + nodes.BUTTONS_H(node);
+			}
+			var mouse = Input.getMouse();
+			if (Math.abs(mouse.x - linkX) > 5 || Math.abs(mouse.y - linkY) > 5) { // Link length
+				nodeSearch(-1, -1, function() {
+					var n = nodes.nodesSelected[0];
+					if (linkDrag.to_id == -1 && n.inputs.length > 0) {
+						linkDrag.to_id = n.id;
+						linkDrag.to_socket = 0;
+						getCanvas().links.push(linkDrag);
+					}
+					else if (linkDrag.from_id == -1 && n.outputs.length > 0) {
+						linkDrag.from_id = n.id;
+						linkDrag.from_socket = 0;
+						getCanvas().links.push(linkDrag);
+					}
+				});
+			}
+			else {
+				Context.nodePreviewSocket = linkDrag.from_id > -1 ? linkDrag.from_socket : 0;
+			}
 		}
 	}
 
@@ -112,7 +129,7 @@ class UINodes {
 			mchanged = changed = false;
 			canvasChanged();
 			if (mreleased) {
-				UISidebar.inst.hwnd.redraws = 2;
+				UISidebar.inst.hwnd0.redraws = 2;
 				History.editNodes(lastCanvas, canvasType);
 			}
 		}
@@ -125,15 +142,12 @@ class UINodes {
 		if (!App.uiEnabled) return;
 		var kb = Input.getKeyboard();
 
-		if (defaultWindowW == 0) defaultWindowW = Std.int(iron.App.w() / 2);
-		if (defaultWindowH == 0) defaultWindowH = Std.int(iron.App.h() / 2);
-
 		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
 		wy = UIHeader.inst.headerh * 2;
 		if (UIView2D.inst.show) {
-			wy += iron.App.h() - defaultWindowH;
+			wy += iron.App.h() - Config.raw.layout[LayoutNodesH];
 		}
-		var ww = defaultWindowW;
+		var ww = Config.raw.layout[LayoutNodesW];
 		var mx = mouse.x;
 		var my = mouse.y;
 		if (mx < wx || mx > wx + ww || my < wy) return;
@@ -201,9 +215,9 @@ class UINodes {
 			var nodeList = canvasType == CanvasMaterial ? NodesMaterial.list : NodesBrush.list;
 			for (list in nodeList) {
 				for (n in list) {
-					if (n.name.toLowerCase().indexOf(search) >= 0) {
+					if (tr(n.name).toLowerCase().indexOf(search) >= 0) {
 						ui.t.BUTTON_COL = count == nodeSearchOffset ? ui.t.HIGHLIGHT_COL : ui.t.WINDOW_BG_COL;
-						if (ui.button(n.name, Left) || (enter && count == nodeSearchOffset)) {
+						if (ui.button(tr(n.name), Left) || (enter && count == nodeSearchOffset)) {
 							var nodes = getNodes();
 							var canvas = getCanvas();
 							nodeSearchSpawn = makeNode(n, nodes, canvas); // Spawn selected node
@@ -241,7 +255,7 @@ class UINodes {
 	}
 
 	public function drawGrid() {
-		var ww = defaultWindowW;
+		var ww = Config.raw.layout[LayoutNodesW];
 		var wh = iron.App.h();
 		var w = ww + 100 * 2;
 		var h = wh + 100 * 2;
@@ -272,7 +286,7 @@ class UINodes {
 	public function render(g: kha.graphics2.Graphics) {
 		if (recompileMat) {
 			if (canvasType == CanvasBrush) {
-				MaterialParser.parseBrush();
+				MakeMaterial.parseBrush();
 				Context.parseBrushInputs();
 				RenderUtil.makeBrushPreview();
 				UISidebar.inst.hwnd1.redraws = 2;
@@ -285,15 +299,23 @@ class UINodes {
 			recompileMat = false;
 		}
 		else if (recompileMatFinal) {
-			MaterialParser.parsePaintMaterial();
+			MakeMaterial.parsePaintMaterial();
 			if (Layers.isFillMaterial()) {
 				RenderUtil.makeMaterialPreview();
 			}
 			var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 			if (decal) RenderUtil.makeDecalPreview();
 
-			UISidebar.inst.hwnd.redraws = 2;
+			UISidebar.inst.hwnd0.redraws = 2;
 			recompileMatFinal = false;
+			Context.nodePreviewDirty = true;
+		}
+
+		var nodes = getNodes();
+		if (nodes.nodesSelected.length > 0 && nodes.nodesSelected[0] != lastNodeSelected) {
+			lastNodeSelected = nodes.nodesSelected[0];
+			Context.nodePreviewDirty = true;
+			Context.nodePreviewSocket = 0;
 		}
 
 		if (!show) return;
@@ -310,23 +332,24 @@ class UINodes {
 
 		if (grid == null) drawGrid();
 
+		if (Config.raw.node_preview && Context.nodePreviewDirty) makeNodePreview();
+
 		// Start with UI
 		ui.begin(g);
 
 		// Make window
-		ww = defaultWindowW;
+		ww = Config.raw.layout[LayoutNodesW];
 		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
 		wy = UIHeader.inst.headerh * 2;
 		var ew = Std.int(ui.ELEMENT_W() * 0.7);
 		wh = iron.App.h();
 		if (UIView2D.inst.show) {
-			wh = defaultWindowH;
-			wy = iron.App.h() - defaultWindowH + UIHeader.inst.headerh * 2;
+			wh = Config.raw.layout[LayoutNodesH];
+			wy = iron.App.h() - Config.raw.layout[LayoutNodesH] + UIHeader.inst.headerh * 2;
 		}
 		if (ui.window(hwnd, wx, wy, ww, wh)) {
 
 			// Grid
-			var nodes = getNodes();
 			ui.g.color = 0xffffffff;
 			ui.g.drawImage(grid, (nodes.panX * nodes.SCALE()) % 100 - 100, (nodes.panY * nodes.SCALE()) % 100 - 100);
 
@@ -335,13 +358,13 @@ class UINodes {
 			nodes.nodeCanvas(ui, c);
 
 			// Node previews
-			if (nodes.nodesSelected.length > 0) {
+			if (Config.raw.node_preview && nodes.nodesSelected.length > 0) {
 				var img: kha.Image = null;
 				var sel = nodes.nodesSelected[0];
 				if (sel.type == "TEX_IMAGE") {
 					var id = sel.buttons[0].default_value;
 					if (id < Project.assets.length) {
-						img = UISidebar.inst.getImage(Project.assets[id]);
+						img = Project.getImage(Project.assets[id]);
 					}
 				}
 				else if (sel.type == "LAYER") {
@@ -362,8 +385,17 @@ class UINodes {
 						img = Project.materials[id].image;
 					}
 				}
+				else if (sel.type == "OUTPUT_MATERIAL_PBR") {
+					img = Context.material.image;
+				}
+				else if (sel.type == "BrushOutputNode") {
+					img = Context.brush.image;
+				}
+				else if (canvasType == CanvasMaterial) {
+					img = Context.nodePreview;
+				}
 				if (img != null) {
-					var tw = 64 * ui.SCALE();
+					var tw = 80 * ui.SCALE();
 					var th = tw * (img.height / img.width);
 					var tx = ww - tw - 8 * ui.SCALE();
 					var ty = wh - th - 40 * ui.SCALE();
@@ -374,6 +406,7 @@ class UINodes {
 					var invertY = false;
 					#end
 
+					ui.g.color = 0xffffffff;
 					invertY ?
 						ui.g.drawScaledImage(img, tx, ty + th, tw, -th) :
 						ui.g.drawScaledImage(img, tx, ty, tw, th);
@@ -414,7 +447,7 @@ class UINodes {
 
 			var cats = canvasType == CanvasMaterial ? NodesMaterial.categories : NodesBrush.categories;
 			for (i in 0...cats.length) {
-				if ((ui.button(cats[i], Left) && UISidebar.inst.ui.comboSelectedHandle == null) || (ui.isHovered && drawMenu)) {
+				if ((ui.button(tr(cats[i]), Left) && UISidebar.inst.ui.comboSelectedHandle == null) || (ui.isHovered && drawMenu)) {
 					addNodeButton = true;
 					menuCategory = i;
 					popupX = wx + ui._x;
@@ -455,7 +488,7 @@ class UINodes {
 			ui.t.ELEMENT_OFFSET = 0;
 
 			for (n in list[menuCategory]) {
-				if (ui.button("      " + n.name, Left)) {
+				if (ui.button("      " + tr(n.name), Left)) {
 					var canvas = getCanvas();
 					var nodes = getNodes();
 					var node = makeNode(n, nodes, canvas);
@@ -488,6 +521,7 @@ class UINodes {
 	}
 
 	public function acceptLayerDrag(layerIndex: Int) {
+		if (Project.layers[layerIndex].getChildren() != null) return;
 		var n = NodesMaterial.createNode(Context.layerIsMask ? "LAYER_MASK" : "LAYER");
 		n.buttons[0].default_value = layerIndex;
 		getNodes().nodesSelected = [n];
@@ -513,5 +547,27 @@ class UINodes {
 			soc.node_id = node.id;
 		}
 		return node;
+	}
+
+	function makeNodePreview() {
+		var nodes = Context.material.nodes;
+		if (nodes.nodesSelected.length == 0) return;
+
+		var node = nodes.nodesSelected[0];
+		if (node.type == "TEX_IMAGE" ||
+			node.type == "LAYER" ||
+			node.type == "LAYER_MASK" ||
+			node.type == "MATERIAL" ||
+			node.type == "OUTPUT_MATERIAL_PBR") return;
+
+		if (Context.material.canvas.nodes.indexOf(node) == -1) return;
+
+		if (Context.nodePreview == null) {
+			Context.nodePreview = kha.Image.createRenderTarget(RenderUtil.matPreviewSize, RenderUtil.matPreviewSize);
+		}
+
+		Context.nodePreviewDirty = false;
+		UINodes.inst.hwnd.redraws = 2;
+		RenderUtil.makeNodePreview(Context.material.canvas, node, Context.nodePreview);
 	}
 }
