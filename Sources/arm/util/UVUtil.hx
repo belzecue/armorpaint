@@ -108,8 +108,8 @@ class UVUtil {
 
 		if (pipeDilate == null) {
 			pipeDilate = new PipelineState();
-			pipeDilate.vertexShader = kha.Shaders.getVertex("dilate_mask.vert");
-			pipeDilate.fragmentShader = kha.Shaders.getFragment("dilate_mask.frag");
+			pipeDilate.vertexShader = kha.Shaders.getVertex("dilate_map.vert");
+			pipeDilate.fragmentShader = kha.Shaders.getFragment("dilate_map.frag");
 			var vs = new VertexStructure();
 			#if (kha_metal || kha_vulkan)
 			vs.add("tex", VertexData.Short2Norm);
@@ -126,7 +126,9 @@ class UVUtil {
 			// dilateTexUnpack = pipeDilate.getConstantLocation("texUnpack");
 		}
 
-		var geom = Context.mergedObject != null ? Context.mergedObject.data.geom : Context.paintObject.data.geom;
+		var mask = Context.objectMaskUsed() ? Context.layer.objectMask : 0;
+		if (Context.layerFilterUsed()) mask = Context.layerFilter;
+		var geom = mask == 0 && Context.mergedObject != null ? Context.mergedObject.data.geom : Context.paintObject.data.geom;
 		var g4 = dilatemap.g4;
 		g4.begin();
 		g4.clear(0x00000000);

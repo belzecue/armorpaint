@@ -35,8 +35,8 @@ class RenderPathPreview {
 
 			var t = new RenderTargetRaw();
 			t.name = "mtex";
-			t.width = RenderUtil.matPreviewSize;
-			t.height = RenderUtil.matPreviewSize;
+			t.width = Std.int(RenderUtil.matPreviewSize * 2.0);
+			t.height = Std.int(RenderUtil.matPreviewSize * 2.0);
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
 			#if kha_opengl
@@ -48,8 +48,8 @@ class RenderPathPreview {
 		{
 			var t = new RenderTargetRaw();
 			t.name = "mgbuffer0";
-			t.width = RenderUtil.matPreviewSize;
-			t.height = RenderUtil.matPreviewSize;
+			t.width = Std.int(RenderUtil.matPreviewSize * 2.0);
+			t.height = Std.int(RenderUtil.matPreviewSize * 2.0);
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
 			t.depth_buffer = "mmain";
@@ -59,8 +59,8 @@ class RenderPathPreview {
 		{
 			var t = new RenderTargetRaw();
 			t.name = "mgbuffer1";
-			t.width = RenderUtil.matPreviewSize;
-			t.height = RenderUtil.matPreviewSize;
+			t.width = Std.int(RenderUtil.matPreviewSize * 2.0);
+			t.height = Std.int(RenderUtil.matPreviewSize * 2.0);
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
 			path.createRenderTarget(t);
@@ -69,8 +69,8 @@ class RenderPathPreview {
 		{
 			var t = new RenderTargetRaw();
 			t.name = "mgbuffer2";
-			t.width = RenderUtil.matPreviewSize;
-			t.height = RenderUtil.matPreviewSize;
+			t.width = Std.int(RenderUtil.matPreviewSize * 2.0);
+			t.height = Std.int(RenderUtil.matPreviewSize * 2.0);
 			t.format = "RGBA64";
 			t.scale = Inc.getSuperSampling();
 			path.createRenderTarget(t);
@@ -123,12 +123,11 @@ class RenderPathPreview {
 		#end
 
 		var framebuffer = "texpreview";
-		var selectedMat = UIHeader.inst.worktab.position == SpaceRender ? Context.materialScene : Context.material;
+		var selectedMat = Context.material;
 		RenderPath.active.renderTargets.get("texpreview").image = selectedMat.image;
 		RenderPath.active.renderTargets.get("texpreview_icon").image = selectedMat.imageIcon;
 
 		path.setTarget(framebuffer);
-
 		path.bindTarget("mtex", "tex");
 		path.drawShader("shader_datas/compositor_pass/compositor_pass");
 

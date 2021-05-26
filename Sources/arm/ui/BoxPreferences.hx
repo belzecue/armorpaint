@@ -13,8 +13,6 @@ import arm.io.ImportKeymap;
 import arm.io.ImportTheme;
 import arm.sys.Path;
 import arm.sys.File;
-import arm.render.RenderPathDeferred;
-import arm.render.RenderPathForward;
 import arm.Enums;
 
 class BoxPreferences {
@@ -81,18 +79,44 @@ class BoxPreferences {
 				// var gridSnap = ui.check(Id.handle({selected: false}), "Grid Snap");
 
 				ui.endElement();
-				ui.row([0.5]);
+				ui.row([0.5, 0.5]);
 				if (ui.button(tr("Restore"))) {
 					UIMenu.draw(function(ui: Zui) {
 						ui.text(tr("Restore defaults?"), Right, ui.t.HIGHLIGHT_COL);
 						if (ui.button(tr("Confirm"), Left)) {
-							ui.t.ELEMENT_H = App.defaultElementH;
-							Config.restore();
-							setScale();
-							if (filesPlugin != null) for (f in filesPlugin) Plugin.stop(f);
-							filesPlugin = null;
-							filesKeymap = null;
-							MakeMaterial.parsePaintMaterial();
+							iron.App.notifyOnInit(function() {
+								ui.t.ELEMENT_H = App.defaultElementH;
+								Config.restore();
+								setScale();
+								if (filesPlugin != null) for (f in filesPlugin) Plugin.stop(f);
+								filesPlugin = null;
+								filesKeymap = null;
+								MakeMaterial.parseMeshMaterial();
+								MakeMaterial.parsePaintMaterial();
+							});
+						}
+						if (ui.button(tr("Import..."), Left)) {
+							UIFiles.show("arm", false, function(path: String) {
+								Data.getBlob(path, function(b: kha.Blob) {
+									var raw = Json.parse(b.toString());
+									iron.App.notifyOnInit(function() {
+										ui.t.ELEMENT_H = App.defaultElementH;
+										Config.importFrom(raw);
+										setScale();
+										MakeMaterial.parseMeshMaterial();
+										MakeMaterial.parsePaintMaterial();
+									});
+								});
+							});
+						}
+					}, 3);
+				}
+				if (ui.button(tr("Reset Layout"))) {
+					UIMenu.draw(function(ui: Zui) {
+						ui.text(tr("Reset layout?"), Right, ui.t.HIGHLIGHT_COL);
+						if (ui.button(tr("Confirm"), Left)) {
+							Config.initLayout();
+							Config.save();
 						}
 					}, 2);
 				}
@@ -111,7 +135,7 @@ class BoxPreferences {
 				ui.combo(themeHandle, themes, tr("Theme"));
 				if (themeHandle.changed) {
 					Config.raw.theme = themes[themeHandle.position] + ".json";
-					loadTheme(Config.raw.theme);
+					Config.loadTheme(Config.raw.theme);
 				}
 
 				if (ui.button(tr("New"))) {
@@ -162,7 +186,7 @@ class BoxPreferences {
 				ui.text("", 0, h.color);
 				if (ui.isHovered && ui.inputReleased) {
 					UIMenu.draw(function(ui) {
-						ui.fill(0, 0, ui._w / ui.ops.scaleFactor, ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
+						ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 						ui.changed = false;
 						zui.Ext.colorWheel(ui, h, false, null, false);
 						if (ui.changed) UIMenu.keepOpen = true;
@@ -203,7 +227,7 @@ class BoxPreferences {
 						if (ui.isHovered && ui.inputReleased) {
 							h.color = untyped theme[key];
 							UIMenu.draw(function(ui) {
-								ui.fill(0, 0, ui._w / ui.ops.scaleFactor, ui.t.ELEMENT_H * 6, ui.t.SEPARATOR_COL);
+								ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 								ui.changed = false;
 								untyped theme[key] = zui.Ext.colorWheel(ui, h, false, null, false);
 								if (ui.changed) UIMenu.keepOpen = true;
@@ -232,6 +256,7 @@ class BoxPreferences {
 			if (ui.tab(htab, tr("Usage"), true)) {
 				Context.undoHandle = Id.handle({value: Config.raw.undo_steps});
 				Config.raw.undo_steps = Std.int(ui.slider(Context.undoHandle, tr("Undo Steps"), 1, 64, false, 1));
+				if (Config.raw.undo_steps < 1) Config.raw.undo_steps = Std.int(Context.undoHandle.value = 1);
 				if (Context.undoHandle.changed) {
 					ui.g.end();
 					while (History.undoLayers.length < Config.raw.undo_steps) {
@@ -262,6 +287,15 @@ class BoxPreferences {
 					Config.raw.workspace = workspaceHandle.position;
 				}
 
+				var layerResHandle = Id.handle({position: Config.raw.layer_res});
+				ui.combo(layerResHandle, ["128", "256", "512", "1K", "2K", "4K", "8K"], tr("Default Layer Resolution"), true);
+				if (layerResHandle.changed) {
+					Config.raw.layer_res = layerResHandle.position;
+				}
+
+				var serverHandle = Id.handle({text: Config.raw.server});
+				Config.raw.server = ui.textInput(serverHandle, tr("Cloud Server"));
+
 				var materialLiveHandle = Id.handle({selected: Config.raw.material_live});
 				Config.raw.material_live = ui.check(materialLiveHandle, tr("Live Material Preview"));
 				if (ui.isHovered) ui.tooltip(tr("Instantly update material preview on node change"));
@@ -276,17 +310,17 @@ class BoxPreferences {
 				if (brush3dHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.enabled = Config.raw.brush_3d;
-				var brushDepthRejectHandle = Id.handle({selected: Context.brushDepthReject});
-				Context.brushDepthReject = ui.check(brushDepthRejectHandle, tr("Depth Reject"));
+				var brushDepthRejectHandle = Id.handle({selected: Config.raw.brush_depth_reject});
+				Config.raw.brush_depth_reject = ui.check(brushDepthRejectHandle, tr("Depth Reject"));
 				if (brushDepthRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.row([0.5, 0.5]);
 
-				var brushAngleRejectHandle = Id.handle({selected: Context.brushAngleReject});
-				Context.brushAngleReject = ui.check(brushAngleRejectHandle, tr("Angle Reject"));
+				var brushAngleRejectHandle = Id.handle({selected: Config.raw.brush_angle_reject});
+				Config.raw.brush_angle_reject = ui.check(brushAngleRejectHandle, tr("Angle Reject"));
 				if (brushAngleRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
-				if (!Context.brushAngleReject) ui.enabled = false;
+				if (!Config.raw.brush_angle_reject) ui.enabled = false;
 				var angleDotHandle = Id.handle({value: Context.brushAngleRejectDot});
 				Context.brushAngleRejectDot = ui.slider(angleDotHandle, tr("Angle"), 0.0, 1.0, true);
 				if (angleDotHandle.changed) {
@@ -306,7 +340,7 @@ class BoxPreferences {
 				ui.endElement();
 				ui.row([0.5]);
 				if (ui.button(tr("Help"))) {
-					File.explorer("https://github.com/armory3d/armorpaint_docs#pen");
+					File.start("https://github.com/armory3d/armorpaint_docs#pen");
 				}
 			}
 
@@ -331,16 +365,7 @@ class BoxPreferences {
 				var hrendermode = Id.handle({position: Context.renderMode});
 				Context.renderMode = ui.combo(hrendermode, [tr("Full"), tr("Mobile")], tr("Renderer"), true);
 				if (hrendermode.changed) {
-					if (hrendermode.position == RenderForward) {
-						if (RenderPathForward.path == null) {
-							RenderPathForward.init(RenderPath.active);
-						}
-						RenderPath.active.commands = RenderPathForward.commands;
-					}
-					else {
-						RenderPath.active.commands = RenderPathDeferred.commands;
-					}
-					MakeMaterial.parseMeshMaterial();
+					Context.setRenderPath();
 				}
 
 				#end
@@ -469,7 +494,7 @@ let h1 = new zui.Handle();
 plugin.drawUI = function(ui) {
 	if (ui.panel(h1, 'New Plugin')) {
 		if (ui.button('Button')) {
-			arm.Log.error('Hello');
+			console.error('Hello');
 		}
 	}
 }
@@ -494,7 +519,7 @@ plugin.drawUI = function(ui) {
 				ui.endSticky();
 
 				if (filesPlugin == null) {
-					filesPlugin = File.readDirectory(Path.data() + Path.sep + "plugins");
+					fetchPlugins();
 				}
 
 				if (Config.raw.plugins == null) Config.raw.plugins = [];
@@ -508,14 +533,7 @@ plugin.drawUI = function(ui) {
 					var tag = isJs ? f.split(".")[0] : f;
 					ui.check(h, tag);
 					if (h.changed && h.selected != enabled) {
-						if (h.selected) {
-							Config.raw.plugins.push(f);
-							Plugin.start(f);
-						}
-						else {
-							Config.raw.plugins.remove(f);
-							Plugin.stop(f);
-						}
+						h.selected ? Config.enablePlugin(f) : Config.disablePlugin(f);
 						App.redrawUI();
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
@@ -529,7 +547,7 @@ plugin.drawUI = function(ui) {
 								iron.data.Data.getBlob("plugins/" + f, function(blob: kha.Blob) {
 									TabScript.hscript.text = blob.toString();
 									iron.data.Data.deleteBlob("plugins/" + f);
-									Log.info("Script opened");
+									Console.info("Script opened");
 								});
 
 							}
@@ -567,6 +585,10 @@ plugin.drawUI = function(ui) {
 		}
 	}
 
+	public static function fetchPlugins() {
+		filesPlugin = File.readDirectory(Path.data() + Path.sep + "plugins");
+	}
+
 	public static function getThemeIndex(): Int {
 		return themes.indexOf(Config.raw.theme.substr(0, Config.raw.theme.length - 5)); // Strip .json
 	}
@@ -589,21 +611,5 @@ plugin.drawUI = function(ui) {
 		App.uiBox.setScale(scale);
 		App.uiMenu.setScale(scale);
 		App.resize();
-	}
-
-	public static function loadTheme(theme: String) {
-		if (theme == "default.json") { // Built-in default
-			App.theme = zui.Themes.dark;
-		}
-		else {
-			Data.getBlob("themes/" + theme, function(b: kha.Blob) {
-				App.theme = Json.parse(b.toString());
-			});
-		}
-		App.uiBox.t = App.theme;
-		UISidebar.inst.ui.t = App.theme;
-		UINodes.inst.ui.t = App.theme;
-		UIView2D.inst.ui.t = App.theme;
-		UISidebar.inst.tagUIRedraw();
 	}
 }

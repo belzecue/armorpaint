@@ -11,8 +11,8 @@ import arm.util.RenderUtil;
 class MaterialSlot {
 	public var nodes = new Nodes();
 	public var canvas: TNodeCanvas;
-	public var image: Image = null; // 200px
-	public var imageIcon: Image = null; // 50px
+	public var image: Image = null;
+	public var imageIcon: Image = null;
 	public var previewReady = false;
 	public var data: MaterialData;
 	public var id = 0;
@@ -52,7 +52,19 @@ class MaterialSlot {
 	}
 
 	public function unload() {
-		image.unload();
-		imageIcon.unload();
+		function _next() {
+			image.unload();
+			imageIcon.unload();
+		}
+		App.notifyOnNextFrame(_next);
+	}
+
+	public function delete() {
+		unload();
+		var mpos = Project.materials.indexOf(this);
+		Project.materials.remove(this);
+		if (Project.materials.length > 0) {
+			Context.setMaterial(Project.materials[mpos > 0 ? mpos - 1 : 0]);
+		}
 	}
 }

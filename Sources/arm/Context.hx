@@ -3,6 +3,7 @@ package arm;
 import kha.Image;
 import zui.Zui;
 import zui.Id;
+import iron.RenderPath;
 import iron.math.Vec4;
 import iron.math.Mat4;
 import iron.object.Object;
@@ -12,14 +13,18 @@ import arm.data.MaterialSlot;
 import arm.data.LayerSlot;
 import arm.data.BrushSlot;
 import arm.data.FontSlot;
+import arm.shader.NodeShader;
 import arm.util.UVUtil;
 import arm.util.RenderUtil;
 import arm.util.ParticleUtil;
+import arm.render.RenderPathDeferred;
+import arm.render.RenderPathForward;
 import arm.ui.UISidebar;
 import arm.ui.UIToolbar;
 import arm.ui.UINodes;
 import arm.ui.UIView2D;
 import arm.ui.UIHeader;
+import arm.ui.BoxPreferences;
 import arm.node.MakeMaterial;
 import arm.Enums;
 import arm.ProjectFormat;
@@ -27,15 +32,14 @@ import arm.ProjectFormat;
 class Context {
 
 	public static var material: MaterialSlot;
-	public static var materialScene: MaterialSlot;
 	public static var layer: LayerSlot;
 	public static var layerIsMask = false; // Mask selected for active layer
 	public static var brush: BrushSlot;
 	public static var font: FontSlot;
 	public static var texture: TAsset = null;
-	public static var object: Object;
 	public static var paintObject: MeshObject;
 	public static var mergedObject: MeshObject = null; // For object mask
+	public static var mergedObjectIsAtlas = false; // Only objects referenced by atlas are merged
 	public static var tool = 0;
 
 	public static var ddirty = 0; // depth
@@ -47,9 +51,8 @@ class Context {
 	public static var nodePreviewDirty = false;
 	public static var nodePreviewSocket = 0;
 	public static var nodePreview: Image = null;
-	public static var nodePreviewsBlur: Map<String, Image> = null;
-	public static var nodePreviewsWarp: Map<String, Image> = null;
-
+	public static var nodePreviews: Map<String, Image> = null;
+	public static var nodePreviewsUsed: Array<String> = null;
 
 	public static var colorIdPicked = false;
 	public static var splitView = false;
@@ -57,15 +60,8 @@ class Context {
 	public static var viewIndexLast = -1;
 	public static var materialPreview = false; // Drawing material previews
 	public static var savedCamera = Mat4.identity();
-	public static var baseRPicked = 0.0;
-	public static var baseGPicked = 0.0;
-	public static var baseBPicked = 0.0;
-	public static var normalRPicked = 0.0;
-	public static var normalGPicked = 0.0;
-	public static var normalBPicked = 0.0;
-	public static var roughnessPicked = 0.0;
-	public static var metallicPicked = 0.0;
-	public static var occlusionPicked = 0.0;
+
+	public static var swatch: TSwatchColor;
 	public static var materialIdPicked = 0;
 	public static var uvxPicked = 0.0;
 	public static var uvyPicked = 0.0;
@@ -79,7 +75,6 @@ class Context {
 	public static var norYPicked = 0.0;
 	public static var norZPicked = 0.0;
 
-	public static var defaultEnvmap: Image = null;
 	public static var defaultIrradiance: kha.arrays.Float32Array = null;
 	public static var defaultRadiance: Image = null;
 	public static var defaultRadianceMipmaps: Array<Image> = null;
@@ -104,7 +99,7 @@ class Context {
 	public static var formatQuality = 100.0;
 	public static var layersExport = ExportVisible;
 	public static var splitBy = SplitObject;
-	public static var parseTransform = false;
+	public static var parseTransform = true;
 	public static var parseVCols = false;
 
 	public static var selectTime = 0.0;
@@ -112,7 +107,11 @@ class Context {
 	public static var decalPreview = false;
 	public static var decalX = 0.0;
 	public static var decalY = 0.0;
+	#if (kha_direct3d12 || kha_vulkan)
+	public static var viewportMode = ViewPathTrace;
+	#else
 	public static var viewportMode = ViewLit;
+	#end
 	#if (krom_android || krom_ios || arm_vr)
 	public static var renderMode = RenderForward;
 	#else
@@ -121,9 +120,12 @@ class Context {
 	#if (kha_direct3d12 || kha_vulkan)
 	public static var pathTraceMode = TraceCore;
 	#end
+	public static var viewportShader: NodeShader->String = null;
 	public static var hscaleWasChanged = false;
 	public static var exportMeshFormat = FormatObj;
 	public static var cacheDraws = false;
+	public static var packAssetsOnExport = true;
+	public static var writeIconOnExport = false;
 
 	public static var textToolImage: Image = null;
 	public static var textToolText: String;
@@ -200,12 +202,11 @@ class Context {
 	public static var brushLazyX = 0.0;
 	public static var brushLazyY = 0.0;
 	public static var brushPaint = UVMap;
-	public static var brushDepthReject = true;
-	public static var brushAngleReject = true;
 	public static var brushAngleRejectDot = 0.5;
 	public static var bakeType = BakeAO;
 	public static var bakeAxis = BakeXYZ;
 	public static var bakeUpAxis = BakeUpZ;
+	public static var bakeSamples = 128;
 	public static var bakeAoStrength = 1.0;
 	public static var bakeAoRadius = 1.0;
 	public static var bakeAoOffset = 1.0;
@@ -251,22 +252,9 @@ class Context {
 	public static var vxaoOffset = 1.5;
 	public static var vxaoAperture = 1.2;
 	public static var textureExportPath = "";
-	public static var lastCombo: Handle = null;
-	public static var lastTooltip: Image = null;
 	public static var lastStatusPosition = 0;
 	public static var cameraControls = ControlsOrbit;
 	public static var dragDestination = 0;
-
-	public static function selectMaterialScene(i: Int) {
-		if (Project.materialsScene.length <= i || object == paintObject) return;
-		materialScene = Project.materialsScene[i];
-		if (Std.is(object, MeshObject)) {
-			var mats = cast(object, MeshObject).materials;
-			for (i in 0...mats.length) mats[i] = materialScene.data;
-		}
-		MakeMaterial.parsePaintMaterial();
-		UISidebar.inst.hwnd0.redraws = 2;
-	}
 
 	public static function selectMaterial(i: Int) {
 		if (Project.materials.length <= i) return;
@@ -280,6 +268,7 @@ class Context {
 		UISidebar.inst.hwnd1.redraws = 2;
 		UIHeader.inst.headerHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
+		UINodes.inst.groupStack = [];
 
 		var decal = tool == ToolDecal || tool == ToolText;
 		if (decal) {
@@ -299,7 +288,6 @@ class Context {
 		if (Project.brushes.indexOf(b) == -1) return;
 		brush = b;
 		MakeMaterial.parseBrush();
-		Context.parseBrushInputs();
 		UISidebar.inst.hwnd1.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
 	}
@@ -316,6 +304,20 @@ class Context {
 		RenderUtil.makeDecalPreview();
 		UISidebar.inst.hwnd2.redraws = 2;
 		UIView2D.inst.hwnd.redraws = 2;
+	}
+
+	public static function setSwatch(s: TSwatchColor) {
+		swatch = s;
+		App.notifyOnNextFrame(function() {
+			MakeMaterial.parsePaintMaterial();
+			RenderUtil.makeMaterialPreview();
+			UISidebar.inst.hwnd1.redraws = 2;
+		});
+	}
+
+	public static function selectLayer(i: Int) {
+		if (Project.layers.length <= i) return;
+		setLayer(Project.layers[i]);
 	}
 
 	public static function setLayer(l: LayerSlot, isMask = false) {
@@ -359,23 +361,11 @@ class Context {
 			ParticleUtil.initParticle();
 			MakeMaterial.parseParticleMaterial();
 		}
-	}
 
-	public static function selectObject(o: Object) {
-		object = o;
-
-		if (UIHeader.inst.worktab.position == SpaceRender) {
-			if (Std.is(o, MeshObject)) {
-				for (i in 0...Project.materialsScene.length) {
-					if (Project.materialsScene[i].data == cast(o, MeshObject).materials[0]) {
-						// selectMaterial(i); // loop
-						materialScene = Project.materialsScene[i];
-						UISidebar.inst.hwnd0.redraws = 2;
-						break;
-					}
-				}
-			}
-		}
+		#if krom_ios
+		// No hover on iPad, decals are painted by pen release
+		Config.raw.brush_live = decal;
+		#end
 	}
 
 	public static function selectPaintObject(o: MeshObject) {
@@ -384,7 +374,7 @@ class Context {
 		paintObject = o;
 
 		var mask = layer.objectMask;
-		if (Context.layerFilter > 0) mask = Context.layerFilter;
+		if (Context.layerFilterUsed()) mask = Context.layerFilter;
 
 		if (mergedObject == null || mask > 0) {
 			paintObject.skip_context = "";
@@ -407,5 +397,50 @@ class Context {
 		}
 		iron.Scene.active.world.loadEnvmap(function(_) {});
 		if (Context.savedEnvmap == null) Context.savedEnvmap = iron.Scene.active.world.envmap;
+	}
+
+	@:keep
+	public static function setViewportShader(viewportShader: NodeShader->String) {
+		Context.viewportShader = viewportShader;
+		setRenderPath();
+	}
+
+	public static function setRenderPath() {
+		if (Context.renderMode == RenderForward || Context.viewportShader != null) {
+			if (RenderPathForward.path == null) {
+				RenderPathForward.init(RenderPath.active);
+			}
+			RenderPath.active.commands = RenderPathForward.commands;
+		}
+		else {
+			RenderPath.active.commands = RenderPathDeferred.commands;
+		}
+		iron.App.notifyOnInit(function() {
+			MakeMaterial.parseMeshMaterial();
+		});
+	}
+
+	public static function enableImportPlugin(file: String): Bool {
+		// Return plugin name suitable for importing the specified file
+		if (BoxPreferences.filesPlugin == null) {
+			BoxPreferences.fetchPlugins();
+		}
+		var ext = file.substr(file.lastIndexOf(".") + 1);
+		for (f in BoxPreferences.filesPlugin) {
+			if (f.startsWith("import_") && f.indexOf(ext) >= 0) {
+				Config.enablePlugin(f);
+				Console.info(f + " " + tr("plugin enabled"));
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static function layerFilterUsed(): Bool {
+		return layerFilter > 0 && layerFilter <= Project.paintObjects.length;
+	}
+
+	public static function objectMaskUsed(): Bool {
+		return layer.objectMask > 0 && layer.objectMask <= Project.paintObjects.length;
 	}
 }

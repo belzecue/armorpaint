@@ -12,7 +12,6 @@ import arm.node.MakeMaterial;
 import arm.data.MaterialSlot;
 import arm.util.RenderUtil;
 import arm.util.MaterialUtil;
-import arm.io.ExportArm;
 import arm.sys.Path;
 import arm.Enums;
 
@@ -22,35 +21,19 @@ class TabMaterials {
 	public static function draw() {
 
 		var ui = UISidebar.inst.ui;
-		var isScene = UIHeader.inst.worktab.position == SpaceRender;
-		var materials = isScene ? Project.materialsScene : Project.materials;
-		var selectMaterial = isScene ? Context.selectMaterialScene : Context.selectMaterial;
+		var materials = Project.materials;
+		var selectMaterial = Context.selectMaterial;
 
 		if (ui.tab(UISidebar.inst.htab1, tr("Materials"))) {
 			ui.beginSticky();
 			ui.row([1 / 4, 1 / 4, 1 / 4]);
 			if (ui.button(tr("New"))) {
-				if (isScene) {
-					if (Context.object != Context.paintObject && Std.is(Context.object, MeshObject)) {
-						MaterialUtil.removeMaterialCache();
-						Data.getMaterial("Scene", "Material2", function(md: iron.data.MaterialData) {
-							ui.g.end();
-							md.name = "Material2." + materials.length;
-							Context.materialScene = new MaterialSlot(md);
-							materials.push(Context.materialScene);
-							selectMaterial(materials.length - 1);
-							RenderUtil.makeMaterialPreview();
-							ui.g.begin(false);
-						});
-					}
-				}
-				else {
-					ui.g.end();
-					Context.material = new MaterialSlot(materials[0].data);
-					materials.push(Context.material);
-					updateMaterial();
-					ui.g.begin(false);
-				}
+				ui.g.end();
+				Context.material = new MaterialSlot(materials[0].data);
+				materials.push(Context.material);
+				updateMaterial();
+				ui.g.begin(false);
+				History.newMaterial();
 			}
 
 			if (ui.button(tr("Import"))) {
@@ -60,7 +43,7 @@ class TabMaterials {
 			if (ui.button(tr("Nodes"))) {
 				UISidebar.inst.showMaterialNodes();
 			}
-			else if (ui.isHovered) ui.tooltip(tr("Show Node Editor") + ' (${Config.keymap.toggle_2d_view})');
+			else if (ui.isHovered) ui.tooltip(tr("Show Node Editor") + ' (${Config.keymap.toggle_node_editor})');
 			ui.endSticky();
 			ui.separator(3, false);
 
@@ -80,12 +63,13 @@ class TabMaterials {
 					var i = j + row * num;
 					if (i >= materials.length) {
 						@:privateAccess ui.endElement(imgw);
+						if (Config.raw.show_asset_names) @:privateAccess ui.endElement(0);
 						continue;
 					}
 					var img = ui.SCALE() > 1 ? materials[i].image : materials[i].imageIcon;
 					var imgFull = materials[i].image;
 
-					if (getSelectedMaterial() == materials[i]) {
+					if (Context.material == materials[i]) {
 						// ui.fill(1, -2, img.width + 3, img.height + 3, ui.t.HIGHLIGHT_COL); // TODO
 						var off = row % 2 == 1 ? 1 : 0;
 						var w = 50;
@@ -105,7 +89,7 @@ class TabMaterials {
 					var tile = ui.SCALE() > 1 ? 100 : 50;
 					var state = materials[i].previewReady ? ui.image(img) : ui.image(Res.get("icons.k"), -1, null, tile, tile, tile, tile);
 					if (state == State.Started && ui.inputY > ui._windowY) {
-						if (getSelectedMaterial() != materials[i]) {
+						if (Context.material != materials[i]) {
 							selectMaterial(i);
 							if (UIHeader.inst.worktab.position == SpaceMaterial) {
 								function _init() {
@@ -117,7 +101,7 @@ class TabMaterials {
 						var mouse = Input.getMouse();
 						App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
 						App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
-						App.dragMaterial = getSelectedMaterial();
+						App.dragMaterial = Context.material;
 						if (Time.time() - Context.selectTime < 0.25) {
 							UISidebar.inst.showMaterialNodes();
 							App.dragMaterial = null;
@@ -138,11 +122,7 @@ class TabMaterials {
 
 							if (ui.button(tr("Export"), Left)) {
 								selectMaterial(i);
-								UIFiles.show("arm", true, function(path: String) {
-									var f = UIFiles.filename;
-									if (f == "") f = tr("untitled");
-									ExportArm.runMaterial(path + Path.sep + f);
-								});
+								BoxExport.showMaterial();
 							}
 
 							if (ui.button(tr("Bake"), Left)) {
@@ -157,15 +137,18 @@ class TabMaterials {
 									var cloned = Json.parse(Json.stringify(materials[i].canvas));
 									Context.material.canvas = cloned;
 									updateMaterial();
+									History.duplicateMaterial();
 								}
 								iron.App.notifyOnInit(_init);
 							}
 
 							if (materials.length > 1 && ui.button(tr("Delete"), Left)) {
+								History.deleteMaterial();
 								selectMaterial(i == 0 ? 1 : 0);
 								materials.splice(i, 1);
 								UISidebar.inst.hwnd1.redraws = 2;
 								for (m in Project.materials) updateMaterialPointers(m.canvas.nodes, i);
+								for (n in m.canvas.nodes) UINodes.onNodeRemove(n);
 							}
 
 							var baseHandle = Id.handle().nest(m.id, {selected: m.paintBase});
@@ -206,7 +189,11 @@ class TabMaterials {
 						ui._x = uix;
 						ui._y += slotw * 0.9;
 						ui.text(materials[i].canvas.name, Center);
+						if (ui.isHovered) ui.tooltip(materials[i].canvas.name);
 						ui._y -= slotw * 0.9;
+						if (i == materials.length - 1) {
+							ui._y += j == num - 1 ? imgw : imgw + ui.ELEMENT_H() + ui.ELEMENT_OFFSET();
+						}
 					}
 				}
 
@@ -222,14 +209,11 @@ class TabMaterials {
 	static function updateMaterial() {
 		UIHeader.inst.headerHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
+		UINodes.inst.groupStack = [];
 		MakeMaterial.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		if (decal) RenderUtil.makeDecalPreview();
-	}
-
-	static function getSelectedMaterial():MaterialSlot {
-		return UIHeader.inst.worktab.position == SpaceRender ? Context.materialScene : Context.material;
 	}
 
 	static function updateMaterialPointers(nodes: Array<TNode>, i: Int) {

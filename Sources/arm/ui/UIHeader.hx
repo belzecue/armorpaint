@@ -44,32 +44,38 @@ class UIHeader {
 				if (Project.assets.length > 0) ui.image(Project.getImage(Project.assets[cid]));
 			}
 			else if (Context.tool == ToolPicker) {
-				Context.baseRPicked = Math.round(Context.baseRPicked * 10) / 10;
-				Context.baseGPicked = Math.round(Context.baseGPicked * 10) / 10;
-				Context.baseBPicked = Math.round(Context.baseBPicked * 10) / 10;
-				Context.normalRPicked = Math.round(Context.normalRPicked * 10) / 10;
-				Context.normalGPicked = Math.round(Context.normalGPicked * 10) / 10;
-				Context.normalBPicked = Math.round(Context.normalBPicked * 10) / 10;
-				Context.occlusionPicked = Math.round(Context.occlusionPicked * 100) / 100;
-				Context.roughnessPicked = Math.round(Context.roughnessPicked * 100) / 100;
-				Context.metallicPicked = Math.round(Context.metallicPicked * 100) / 100;
-				var baseRPicked = Context.baseRPicked;
-				var baseGPicked = Context.baseGPicked;
-				var baseBPicked = Context.baseBPicked;
-				var normalRPicked = Context.normalRPicked;
-				var normalGPicked = Context.normalGPicked;
-				var normalBPicked = Context.normalBPicked;
-				var occlusionPicked = Context.occlusionPicked;
-				var roughnessPicked = Context.roughnessPicked;
-				var metallicPicked = Context.metallicPicked;
+				var baseRPicked = Math.round(Context.swatch.base.R * 10) / 10;
+				var baseGPicked = Math.round(Context.swatch.base.G * 10) / 10;
+				var baseBPicked = Math.round(Context.swatch.base.B * 10) / 10;
+				var normalRPicked = Math.round(Context.swatch.normal.R * 10) / 10;
+				var normalGPicked = Math.round(Context.swatch.normal.G * 10) / 10;
+				var normalBPicked = Math.round(Context.swatch.normal.B * 10) / 10;
+				var occlusionPicked = Math.round(Context.swatch.occlusion * 100) / 100;
+				var roughnessPicked = Math.round(Context.swatch.roughness * 100) / 100;
+				var metallicPicked = Math.round(Context.swatch.metallic * 100) / 100;
 				#if kha_metal
 				ui.text('TODO'); // Skips first draw
 				#end
-				ui.text(tr("Base") + ' $baseRPicked,$baseGPicked,$baseBPicked');
-				ui.text(tr("Nor") + ' $normalRPicked,$normalGPicked,$normalBPicked');
-				ui.text(tr("Occlusion") + ' $occlusionPicked');
-				ui.text(tr("Roughness") + ' $roughnessPicked');
-				ui.text(tr("Metallic") + ' $metallicPicked');
+
+				var h = Id.handle();
+				h.color.R = baseRPicked;
+				h.color.G = baseGPicked;
+				h.color.B = baseBPicked;
+				ui.text("", 0, h.color);
+				if (ui.isHovered && ui.inputReleased) {
+					UIMenu.draw(function(ui) {
+						ui.fill(0, 0, ui._w / ui.ops.scaleFactor, ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
+						ui.changed = false;
+						zui.Ext.colorWheel(ui, h, false, null, false);
+						if (ui.changed) UIMenu.keepOpen = true;
+					}, 3);
+				}
+
+				ui.text(tr("Base") + ' ($baseRPicked,$baseGPicked,$baseBPicked)');
+				ui.text(tr("Normal") + ' ($normalRPicked,$normalGPicked,$normalBPicked)');
+				ui.text(tr("Occlusion") + ' ($occlusionPicked)');
+				ui.text(tr("Roughness") + ' ($roughnessPicked)');
+				ui.text(tr("Metallic") + ' ($metallicPicked)');
 				Context.pickerSelectMaterial = ui.check(Id.handle({selected: Context.pickerSelectMaterial}), tr("Select Material"));
 				ui.combo(Context.pickerMaskHandle, [tr("None"), tr("Material")], tr("Mask"), true);
 				if (Context.pickerMaskHandle.changed) {
@@ -78,6 +84,29 @@ class UIHeader {
 			}
 			else if (Context.tool == ToolBake) {
 				ui.changed = false;
+
+				#if (kha_direct3d12 || kha_vulkan)
+				var baking = Context.pdirty > 0;
+				var rtBake = Context.bakeType == BakeAO || Context.bakeType == BakeLightmap || Context.bakeType == BakeBentNormal || Context.bakeType == BakeThickness;
+				if (baking && ui.button(tr("Stop"))) {
+					Context.pdirty = 0;
+					Context.rdirty = 2;
+				}
+				#else
+				var baking = false;
+				var rtBake = false;
+				#end
+
+				if (!baking && ui.button(tr("Bake"))) {
+					Context.pdirty = rtBake ? Context.bakeSamples : 1;
+					Context.rdirty = 3;
+					App.notifyOnNextFrame(function() {
+						Context.layerPreviewDirty = true;
+					});
+					UISidebar.inst.hwnd0.redraws = 2;
+					History.pushUndo = true;
+				}
+
 				var bakeHandle = Id.handle({position: Context.bakeType});
 				var bakes = [
 					tr("AO"),
@@ -98,13 +127,21 @@ class UIHeader {
 				bakes.push(tr("Thickness"));
 				#end
 				Context.bakeType = ui.combo(bakeHandle, bakes, tr("Bake"));
+
+				#if (kha_direct3d12 || kha_vulkan)
+				if (rtBake) {
+					var samplesHandle = Id.handle({value: Context.bakeSamples});
+					Context.bakeSamples = Std.int(ui.slider(samplesHandle, tr("Samples"), 1, 512, true, 1));
+				}
+				#end
+
 				if (Context.bakeType == BakeNormalObject || Context.bakeType == BakePosition || Context.bakeType == BakeBentNormal) {
 					var bakeUpAxisHandle = Id.handle({position: Context.bakeUpAxis});
-					Context.bakeUpAxis = ui.combo(bakeUpAxisHandle, ["Z", "Y"], tr("Up Axis"), true);
+					Context.bakeUpAxis = ui.combo(bakeUpAxisHandle, [tr("Z"), tr("Y")], tr("Up Axis"), true);
 				}
 				if (Context.bakeType == BakeAO || Context.bakeType == BakeCurvature) {
 					var bakeAxisHandle = Id.handle({position: Context.bakeAxis});
-					Context.bakeAxis = ui.combo(bakeAxisHandle, ["XYZ", "X", "Y", "Z", "-X", "-Y", "-Z"], tr("Axis"), true);
+					Context.bakeAxis = ui.combo(bakeAxisHandle, [tr("XYZ"), tr("X"), tr("Y"), tr("Z"), tr("-X"), tr("-Y"), tr("-Z")], tr("Axis"), true);
 				}
 				if (Context.bakeType == BakeAO) {
 					var strengthHandle = Id.handle({value: Context.bakeAoStrength});
@@ -115,7 +152,7 @@ class UIHeader {
 					Context.bakeAoOffset = ui.slider(offsetHandle, tr("Offset"), 0.0, 2.0, true);
 				}
 				#if (kha_direct3d12 || kha_vulkan)
-				if (Context.bakeType == BakeAO || Context.bakeType == BakeLightmap || Context.bakeType == BakeBentNormal || Context.bakeType == BakeThickness) {
+				if (rtBake) {
 					ui.text(tr("Rays/pix:") + ' ${arm.render.RenderPathRaytrace.raysPix}');
 					ui.text(tr("Rays/sec:") + ' ${arm.render.RenderPathRaytrace.raysSec}');
 				}
@@ -263,12 +300,12 @@ class UIHeader {
 					var symXHandle = Id.handle({selected: false});
 					var symYHandle = Id.handle({selected: false});
 					var symZHandle = Id.handle({selected: false});
-					ui._w = Std.int(55 * sc);
+					ui._w = Std.int(56 * sc);
 					ui.text(tr("Symmetry"));
 					ui._w = Std.int(25 * sc);
-					Context.symX = ui.check(symXHandle, "X");
-					Context.symY = ui.check(symYHandle, "Y");
-					Context.symZ = ui.check(symZHandle, "Z");
+					Context.symX = ui.check(symXHandle, tr("X"));
+					Context.symY = ui.check(symYHandle, tr("Y"));
+					Context.symZ = ui.check(symZHandle, tr("Z"));
 					if (symXHandle.changed || symYHandle.changed || symZHandle.changed) {
 						MakeMaterial.parsePaintMaterial();
 					}

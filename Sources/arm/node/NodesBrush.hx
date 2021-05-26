@@ -5,7 +5,9 @@ import zui.Nodes;
 class NodesBrush {
 
 	// Mark strings as localizable
-	public static inline function _tr(s: String) { return s; }
+	public static inline function _tr(s: String) {
+		return s;
+	}
 
 	public static var categories = [_tr("Nodes")];
 
@@ -212,7 +214,7 @@ class NodesBrush {
 					{
 						name: _tr("operation"),
 						type: "ENUM",
-						data: ["Add", "Subtract", "Multiply", "Divide", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Power", "Logarithm", "Minimum", "Maximum", "Round", "Less Than", "Greater Than", "Module", "Absolute"],
+						data: ["Add", "Subtract", "Multiply", "Divide", "Power", "Logarithm", "Square Root", "Absolute", "Minimum", "Maximum", "Less Than", "Greater Than", "Round", "Floor", "Ceil", "Fract", "Modulo", "Ping-Pong", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Arctan2"],
 						default_value: 0,
 						output: 0
 					},
@@ -465,7 +467,7 @@ class NodesBrush {
 					{
 						name: _tr("operation"),
 						type: "ENUM",
-						data: ["Add", "Subtract", "Average", "Dot Product", "Cross Product", "Normalize"],
+						data: ["Add", "Subtract", "Multiply", "Divide", "Average", "Dot Product", "Cross Product", "Normalize", "Project", "Reflect", "Length", "Distance"],
 						default_value: 0,
 						output: 0
 					}

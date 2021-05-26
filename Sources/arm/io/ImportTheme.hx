@@ -7,7 +7,7 @@ class ImportTheme {
 
 	public static function run(path: String) {
 		if (!Path.isJson(path)) {
-			Log.error(Strings.error1());
+			Console.error(Strings.error1());
 			return;
 		}
 
@@ -17,7 +17,7 @@ class ImportTheme {
 		arm.ui.BoxPreferences.fetchThemes(); // Refresh file list
 		Config.raw.theme = filename;
 		arm.ui.BoxPreferences.themeHandle.position = arm.ui.BoxPreferences.getThemeIndex();
-		arm.ui.BoxPreferences.loadTheme(Config.raw.theme);
-		Log.info("Theme '" + filename + "' imported.");
+		Config.loadTheme(Config.raw.theme);
+		Console.info("Theme '" + filename + "' imported.");
 	}
 }

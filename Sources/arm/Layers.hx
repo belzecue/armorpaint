@@ -17,6 +17,7 @@ import arm.data.LayerSlot;
 import arm.node.MakeMaterial;
 import arm.render.RenderPathPaint;
 import arm.util.MeshUtil;
+import arm.util.UVUtil;
 import arm.Enums;
 import arm.ProjectFormat;
 
@@ -31,6 +32,7 @@ class Layers {
 	public static var pipeCopy8: PipelineState;
 	public static var pipeCopy128: PipelineState;
 	public static var pipeCopyBGRA: PipelineState;
+	public static var pipeCopyRGB: PipelineState = null;
 	public static var pipeInvert8: PipelineState;
 	public static var pipeMask: PipelineState;
 	public static var tex0: TextureUnit;
@@ -218,6 +220,19 @@ class Layers {
 		texaMask = pipeMask.getTextureUnit("texa");
 	}
 
+	public static function makePipeCopyRGB() {
+		pipeCopyRGB = new PipelineState();
+		pipeCopyRGB.vertexShader = kha.Shaders.getVertex("layer_view.vert");
+		pipeCopyRGB.fragmentShader = kha.Shaders.getFragment("layer_copy.frag");
+		var vs = new VertexStructure();
+		vs.add("pos", VertexData.Float3);
+		vs.add("tex", VertexData.Float2);
+		vs.add("col", VertexData.Float4);
+		pipeCopyRGB.inputLayout = [vs];
+		pipeCopyRGB.colorWriteMasksAlpha = [false];
+		pipeCopyRGB.compile();
+	}
+
 	public static function makeCursorPipe() {
 		pipeCursor = new PipelineState();
 		pipeCursor.vertexShader = kha.Shaders.getVertex("cursor.vert");
@@ -341,7 +356,7 @@ class Layers {
 	}
 
 	public static function mergeLayer(l0 : LayerSlot, l1: LayerSlot, use_mask = false) {
-		if (!l1.visible) return;
+		if (!l1.visible || l1.getChildren() != null) return;
 
 		if (pipeMerge == null) makePipe();
 		makeTempImg();
@@ -387,7 +402,7 @@ class Layers {
 			l0.texpaint_nor.g4.setTexture(texmask, mask);
 			l0.texpaint_nor.g4.setTexture(texa, imga);
 			l0.texpaint_nor.g4.setFloat(opac, l1.maskOpacity);
-			l0.texpaint_nor.g4.setInt(blending, -1);
+			l0.texpaint_nor.g4.setInt(blending, l1.paintNorBlend ? -2 : -1);
 			l0.texpaint_nor.g4.setVertexBuffer(iron.data.ConstData.screenAlignedVB);
 			l0.texpaint_nor.g4.setIndexBuffer(iron.data.ConstData.screenAlignedIB);
 			l0.texpaint_nor.g4.drawIndexedVertices();
@@ -402,7 +417,7 @@ class Layers {
 
 		if (l1.paintOcc || l1.paintRough || l1.paintMet || l1.paintHeight) {
 			if (l1.paintOcc && l1.paintRough && l1.paintMet && l1.paintHeight) {
-				commandsMergePack(pipeMerge, l0.texpaint_pack, l1.texpaint, l1.texpaint_pack, l1.maskOpacity, mask);
+				commandsMergePack(pipeMerge, l0.texpaint_pack, l1.texpaint, l1.texpaint_pack, l1.maskOpacity, mask, l1.paintHeightBlend ? -3 : -1);
 			}
 			else {
 				if (l1.paintOcc) commandsMergePack(pipeMergeR, l0.texpaint_pack, l1.texpaint, l1.texpaint_pack, l1.maskOpacity, mask);
@@ -410,6 +425,59 @@ class Layers {
 				if (l1.paintMet) commandsMergePack(pipeMergeB, l0.texpaint_pack, l1.texpaint, l1.texpaint_pack, l1.maskOpacity, mask);
 			}
 		}
+	}
+
+	public static function flatten(heightToNormal = false): TLayerData {
+		Layers.makeExportImg();
+		Layers.makeTempImg();
+
+		var path = RenderPath.active;
+		var l = Project.layers[0];
+		if (l.visible) {
+			path.setTarget("expa", ["expb", "expc"]);
+			path.bindTarget("texpaint" + l.id, "tex0");
+			path.bindTarget("texpaint_nor" + l.id, "tex1");
+			path.bindTarget("texpaint_pack" + l.id, "tex2");
+			path.drawShader("shader_datas/copy_mrt3_pass/copy_mrt3_pass");
+		}
+		else {
+			Layers.expa.g2.begin(true, 0x00000000);
+			Layers.expa.g2.end();
+		}
+
+		var l0 = { texpaint: Layers.expa, texpaint_nor: Layers.expb, texpaint_pack: Layers.expc, texpaint_mask: l.visible ? l.texpaint_mask : null };
+		if (l0.texpaint_mask != null) {
+			Layers.applyMask(untyped l0);
+		}
+
+		for (i in 1...Project.layers.length) {
+			Layers.mergeLayer(untyped l0, Project.layers[i], true);
+		}
+
+		// Merge height map into normal map
+		if (heightToNormal && MakeMaterial.heightUsed) {
+			Layers.imga.g2.begin(false);
+			Layers.imga.g2.pipeline = Layers.pipeCopy;
+			Layers.imga.g2.drawImage(l0.texpaint_nor, 0, 0);
+			Layers.imga.g2.pipeline = null;
+			Layers.imga.g2.end();
+
+			var empty = path.renderTargets.get("empty_white").image;
+			l0.texpaint_nor.g4.begin();
+			l0.texpaint_nor.g4.setPipeline(Layers.pipeMerge);
+			l0.texpaint_nor.g4.setTexture(Layers.tex0, Layers.imga);
+			l0.texpaint_nor.g4.setTexture(Layers.tex1, l0.texpaint_pack);
+			l0.texpaint_nor.g4.setTexture(Layers.texmask, empty);
+			l0.texpaint_nor.g4.setTexture(Layers.texa, empty);
+			l0.texpaint_nor.g4.setFloat(Layers.opac, 1.0);
+			l0.texpaint_nor.g4.setInt(Layers.blending, -4);
+			l0.texpaint_nor.g4.setVertexBuffer(iron.data.ConstData.screenAlignedVB);
+			l0.texpaint_nor.g4.setIndexBuffer(iron.data.ConstData.screenAlignedIB);
+			l0.texpaint_nor.g4.drawIndexedVertices();
+			l0.texpaint_nor.g4.end();
+		}
+
+		return untyped l0;
 	}
 
 	public static function applyMask(l: LayerSlot) {
@@ -437,7 +505,7 @@ class Layers {
 		l.texpaint.g4.end();
 	}
 
-	public static function commandsMergePack(pipe: PipelineState, i0: kha.Image, i1: kha.Image, i1pack: kha.Image, i1maskOpacity: Float, i1texmask: kha.Image) {
+	public static function commandsMergePack(pipe: PipelineState, i0: kha.Image, i1: kha.Image, i1pack: kha.Image, i1maskOpacity: Float, i1texmask: kha.Image, i1blending = -1) {
 		i0.g4.begin();
 		i0.g4.setPipeline(pipe);
 		i0.g4.setTexture(tex0, i1);
@@ -445,7 +513,7 @@ class Layers {
 		i0.g4.setTexture(texmask, i1texmask);
 		i0.g4.setTexture(texa, imga);
 		i0.g4.setFloat(opac, i1maskOpacity);
-		i0.g4.setInt(blending, -1);
+		i0.g4.setInt(blending, i1blending);
 		i0.g4.setVertexBuffer(iron.data.ConstData.screenAlignedVB);
 		i0.g4.setIndexBuffer(iron.data.ConstData.screenAlignedIB);
 		i0.g4.drawIndexedVertices();
@@ -461,16 +529,15 @@ class Layers {
 	}
 
 	public static function updateFillLayers() {
-		var layers = Project.layers;
-		var selectedLayer = Context.layer;
-		var isMask = Context.layerIsMask;
-		var selectedTool = Context.tool;
+		var _layer = Context.layer;
+		var _layerIsMask = Context.layerIsMask;
+		var _tool = Context.tool;
 		var current: kha.graphics2.Graphics = null;
 
 		if (UIHeader.inst.worktab.position == SpaceMaterial) {
 			if (RenderPathPaint.liveLayer == null) {
 				RenderPathPaint.liveLayer = new arm.data.LayerSlot("_live");
-				RenderPathPaint.liveLayer.createMask(0x00000000);
+				RenderPathPaint.liveLayer.createMask(0xffffffff);
 			}
 
 			current = @:privateAccess kha.graphics2.Graphics.current;
@@ -478,13 +545,15 @@ class Layers {
 
 			UIHeader.inst.worktab.position = SpacePaint;
 			Context.tool = ToolFill;
-			MakeMaterial.parsePaintMaterial();
+			Context.layerIsMask = false;
+			MakeMaterial.parsePaintMaterial(false);
 			Context.pdirty = 1;
 			RenderPathPaint.useLiveLayer(true);
 			RenderPathPaint.commandsPaint(false);
 			RenderPathPaint.dilate(true, true);
 			RenderPathPaint.useLiveLayer(false);
-			Context.tool = selectedTool;
+			Context.tool = _tool;
+			Context.layerIsMask = _layerIsMask;
 			Context.pdirty = 0;
 			Context.rdirty = 2;
 			UIHeader.inst.worktab.position = SpaceMaterial;
@@ -495,8 +564,8 @@ class Layers {
 
 		var hasFillLayer = false;
 		var hasFillMask = false;
-		for (l in layers) if (l.fill_layer == Context.material) hasFillLayer = true;
-		for (l in layers) if (l.fill_mask == Context.material) hasFillMask = true;
+		for (l in Project.layers) if (l.fill_layer == Context.material) hasFillLayer = true;
+		for (l in Project.layers) if (l.fill_mask == Context.material) hasFillMask = true;
 
 		if (hasFillLayer || hasFillMask) {
 
@@ -507,17 +576,13 @@ class Layers {
 
 			if (hasFillLayer) {
 				Context.layerIsMask = false;
-				MakeMaterial.parsePaintMaterial();
+				MakeMaterial.parsePaintMaterial(false);
 
-				for (l in layers) {
+				for (l in Project.layers) {
 					if (l.fill_layer == Context.material) {
 						Context.layer = l;
 						setObjectMask();
-
-						// Decal layer
-						if (l.uvType == UVProject && !Context.layerIsMask) {
-							l.clearLayer();
-						}
+						l.clearLayer();
 						RenderPathPaint.commandsPaint(false);
 						RenderPathPaint.dilate(true, true);
 					}
@@ -526,14 +591,14 @@ class Layers {
 
 			if (hasFillMask) {
 				Context.layerIsMask = true;
-				MakeMaterial.parsePaintMaterial();
+				MakeMaterial.parsePaintMaterial(false);
 
-				for (l in layers) {
+				for (l in Project.layers) {
 					if (l.fill_mask == Context.material) {
 						Context.layer = l;
 						setObjectMask();
 						RenderPathPaint.commandsPaint(false);
-						RenderPathPaint.dilate(true, true);
+						RenderPathPaint.dilate(true, false);
 					}
 				}
 			}
@@ -542,10 +607,10 @@ class Layers {
 			Context.ddirty = 2;
 			Context.rdirty = 2;
 			if (current != null) current.begin(false);
-			Context.layer = selectedLayer;
-			Context.layerIsMask = isMask;
+			Context.layer = _layer;
+			Context.layerIsMask = _layerIsMask;
 			setObjectMask();
-			Context.tool = selectedTool;
+			Context.tool = _tool;
 		}
 	}
 
@@ -559,13 +624,9 @@ class Layers {
 		Context.layerIsMask = false;
 		var _workspace = UIHeader.inst.worktab.position;
 		UIHeader.inst.worktab.position = SpacePaint;
+		Context.layer.clearLayer();
 
-		// Decal layer
-		if (Context.layer.uvType == UVProject && !Context.layerIsMask) {
-			Context.layer.clearLayer();
-		}
-
-		if (parsePaint) MakeMaterial.parsePaintMaterial();
+		if (parsePaint) MakeMaterial.parsePaintMaterial(false);
 		RenderPathPaint.commandsPaint(false);
 		RenderPathPaint.dilate(true, true);
 
@@ -576,25 +637,35 @@ class Layers {
 	}
 
 	public static function setObjectMask() {
-		var ar = ["None"];
+		var ar = [tr("None")];
 		for (p in Project.paintObjects) ar.push(p.name);
 
-		var mask = Context.layer.objectMask;
-		if (Context.layerFilter > 0) mask = Context.layerFilter;
+		var mask = Context.objectMaskUsed() ? Context.layer.objectMask : 0;
+		if (Context.layerFilterUsed()) mask = Context.layerFilter;
 		if (mask > 0) {
-			if (Context.mergedObject != null) Context.mergedObject.visible = false;
+			if (Context.mergedObject != null) {
+				Context.mergedObject.visible = false;
+			}
 			var o = Project.paintObjects[0];
-			for (p in Project.paintObjects) if (p.name == ar[mask]) { o = p; break; }
+			for (p in Project.paintObjects) {
+				if (p.name == ar[mask]) {
+					o = p;
+					break;
+				}
+			}
 			Context.selectPaintObject(o);
 		}
 		else {
-			if (Context.mergedObject == null) {
-				MeshUtil.mergeMesh();
+			var isAtlas = Context.layer.objectMask > 0 && Context.layer.objectMask <= Project.paintObjects.length;
+			if (Context.mergedObject == null || isAtlas || Context.mergedObjectIsAtlas) {
+				var visibles = isAtlas ? Project.getAtlasObjects(Context.layer.objectMask) : null;
+				MeshUtil.mergeMesh(visibles);
 			}
 			Context.selectPaintObject(Context.mainObject());
 			Context.paintObject.skip_context = "paint";
 			Context.mergedObject.visible = true;
 		}
+		UVUtil.dilatemapCached = false;
 	}
 
 	public static function newLayer(clear = true): LayerSlot {

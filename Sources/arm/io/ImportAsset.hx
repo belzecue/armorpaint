@@ -1,19 +1,27 @@
 package arm.io;
 
 import arm.sys.Path;
+import arm.sys.File;
 import arm.ui.UINodes;
 import arm.ui.UIBox;
 import arm.Project;
 
 class ImportAsset {
 
-	public static function run(path: String, dropX = -1.0, dropY = -1.0, showBox = true) {
+	public static function run(path: String, dropX = -1.0, dropY = -1.0, showBox = true, hdrAsEnvmap = true) {
+
+		if (path.startsWith("cloud")) {
+			var abs = File.cacheCloud(path);
+			if (abs == null) return;
+			path = abs;
+		}
+
 		if (Path.isMesh(path)) {
 			showBox ? Project.importMeshBox(path) : ImportMesh.run(path);
 			if (dropX > 0) UIBox.clickToHide = false; // Prevent closing when going back to window after drag and drop
 		}
 		else if (Path.isTexture(path)) {
-			ImportTexture.run(path);
+			ImportTexture.run(path, hdrAsEnvmap);
 			// Place image node
 			var x0 = UINodes.inst.wx;
 			var x1 = UINodes.inst.wx + UINodes.inst.ww;
@@ -43,7 +51,12 @@ class ImportAsset {
 			ImportFolder.run(path);
 		}
 		else {
-			Log.error(Strings.error1());
+			if (Context.enableImportPlugin(path)) {
+				run(path, dropX, dropY, showBox);
+			}
+			else {
+				Console.error(Strings.error1());
+			}
 		}
 	}
 }

@@ -41,7 +41,7 @@ plugin.drawUI = function(ui) {
 							let v = core.ReflectField(d, n);
 							if (core.StdIs(v, Array)) {
 								if (core.StdIs(v[0], Number)) {
-									arm.Log.trace(n);
+									console.log(n);
 									let ar = null;
 									if (v[0] === 0) ar = new Float32Array(v.length - 1);
 									else if (v[0] === 1) ar = new Uint32Array(v.length - 1);
@@ -55,8 +55,8 @@ plugin.drawUI = function(ui) {
 						}
 					}
 					iterate(parsed);
-					let out = iron.ArmPack.encode(parsed).b.bufferValue;
-					Krom.fileSaveBytes(path.substr(0, path.length - 4) + "arm", out);
+					let out = iron.ArmPack.encode(parsed);
+					Krom.fileSaveBytes(path.substr(0, path.length - 4) + "arm", out.b.bufferValue, out.length + 1);
 				});
 			});
 		}

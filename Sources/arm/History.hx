@@ -6,7 +6,9 @@ import arm.ui.UIView2D;
 import arm.ui.UIFiles;
 import arm.ui.UINodes;
 import arm.ui.UIToolbar;
+import arm.sys.Path;
 import arm.data.LayerSlot;
+import arm.data.MaterialSlot;
 import arm.node.MakeMaterial;
 
 class History {
@@ -168,6 +170,24 @@ class History {
 			else if (step.name == tr("Edit Nodes")) {
 				swapCanvas(step);
 			}
+			else if (step.name == tr("New Material")) {
+				Context.material = Project.materials[step.material];
+				step.canvas = Context.material.canvas;
+				Context.material.delete();
+			}
+			else if (step.name == tr("Delete Material")) {
+				Context.material = new MaterialSlot(Project.materials[0].data);
+				Project.materials.insert(step.material, Context.material);
+				Context.material.canvas = step.canvas;
+				UINodes.inst.canvasChanged();
+				@:privateAccess UINodes.inst.getNodes().handle = new zui.Zui.Handle();
+				UINodes.inst.hwnd.redraws = 2;
+			}
+			else if (step.name == tr("Duplicate Material")) {
+				Context.material = Project.materials[step.material];
+				step.canvas = Context.material.canvas;
+				Context.material.delete();
+			}
 			else { // Paint operation
 				undoI = undoI - 1 < 0 ? Config.raw.undo_steps - 1 : undoI - 1;
 				var lay = undoLayers[undoI];
@@ -179,6 +199,7 @@ class History {
 			undos--;
 			redos++;
 			UISidebar.inst.hwnd0.redraws = 2;
+			UISidebar.inst.hwnd1.redraws = 2;
 			Context.ddirty = 2;
 			if (UIView2D.inst.show) UIView2D.inst.hwnd.redraws = 2;
 		}
@@ -293,6 +314,27 @@ class History {
 			else if (step.name == tr("Edit Nodes")) {
 				swapCanvas(step);
 			}
+			else if (step.name == tr("New Material")) {
+				Context.material = new MaterialSlot(Project.materials[0].data);
+				Project.materials.insert(step.material, Context.material);
+				Context.material.canvas = step.canvas;
+				UINodes.inst.canvasChanged();
+				@:privateAccess UINodes.inst.getNodes().handle = new zui.Zui.Handle();
+				UINodes.inst.hwnd.redraws = 2;
+			}
+			else if (step.name == tr("Delete Material")) {
+				Context.material = Project.materials[step.material];
+				step.canvas = Context.material.canvas;
+				Context.material.delete();
+			}
+			else if (step.name == tr("Duplicate Material")) {
+				Context.material = new MaterialSlot(Project.materials[0].data);
+				Project.materials.insert(step.material, Context.material);
+				Context.material.canvas = step.canvas;
+				UINodes.inst.canvasChanged();
+				@:privateAccess UINodes.inst.getNodes().handle = new zui.Zui.Handle();
+				UINodes.inst.hwnd.redraws = 2;
+			}
 			else { // Paint operation
 				var lay = undoLayers[undoI];
 				Context.selectPaintObject(Project.paintObjects[step.object]);
@@ -304,6 +346,7 @@ class History {
 			undos++;
 			redos--;
 			UISidebar.inst.hwnd0.redraws = 2;
+			UISidebar.inst.hwnd1.redraws = 2;
 			Context.ddirty = 2;
 			if (UIView2D.inst.show) UIView2D.inst.hwnd.redraws = 2;
 		}
@@ -409,17 +452,34 @@ class History {
 		push(tr("Layer Blending"));
 	}
 
-	// public static function newMaterial() {}
-	// public static function deleteMaterial() {}
+	public static function newMaterial() {
+		var step = push(tr("New Material"));
+		step.canvas_type = 0;
+		step.canvas = haxe.Json.parse(haxe.Json.stringify(Context.material.canvas));
+	}
 
-	public static function editNodes(canvas: TNodeCanvas, canvas_type: Int) {
+	public static function deleteMaterial() {
+		var step = push(tr("Delete Material"));
+		step.canvas_type = 0;
+		step.canvas = haxe.Json.parse(haxe.Json.stringify(Context.material.canvas));
+	}
+
+	public static function duplicateMaterial() {
+		var step = push(tr("Duplicate Material"));
+		step.canvas_type = 0;
+		step.canvas = haxe.Json.parse(haxe.Json.stringify(Context.material.canvas));
+	}
+
+	public static function editNodes(canvas: TNodeCanvas, canvas_type: Int, canvas_group: Null<Int> = null) {
 		var step = push(tr("Edit Nodes"));
 		step.canvas_type = canvas_type;
+		step.canvas_group = canvas_group;
 		step.canvas = haxe.Json.parse(haxe.Json.stringify(canvas));
 	}
 
 	static function push(name: String): TStep {
-		kha.Window.get(0).title = UIFiles.filename + "* - ArmorPaint";
+		var filename = Project.filepath == "" ? UIFiles.filename : Project.filepath.substring(Project.filepath.lastIndexOf(Path.sep) + 1, Project.filepath.length - 4);
+		kha.Window.get(0).title = filename + "* - ArmorPaint";
 
 		if (undos < Config.raw.undo_steps) undos++;
 		if (redos > 0) {
@@ -427,7 +487,7 @@ class History {
 			redos = 0;
 		}
 
-		var opos = Project.paintObjects.indexOf(cast Context.object);
+		var opos = Project.paintObjects.indexOf(Context.paintObject);
 		var lpos = Project.layers.indexOf(Context.layer);
 		var mpos = Project.materials.indexOf(Context.material);
 		var bpos = Project.brushes.indexOf(Context.brush);
@@ -504,10 +564,14 @@ class History {
 		undoI = (undoI + 1) % Config.raw.undo_steps;
 	}
 
+	static function getCanvasOwner(step: TStep): Dynamic {
+		return step.canvas_group == null ? Project.materials[step.material] : Project.materialGroups[step.canvas_group];
+	}
+
 	static function swapCanvas(step: TStep) {
 		if (step.canvas_type == 0) {
-			var _canvas = Project.materials[step.material].canvas;
-			Project.materials[step.material].canvas = step.canvas;
+			var _canvas = getCanvasOwner(step).canvas;
+			getCanvasOwner(step).canvas = step.canvas;
 			step.canvas = _canvas;
 			Context.material = Project.materials[step.material];
 		}
@@ -538,4 +602,5 @@ typedef TStep = {
 	@:optional public var prev_order: Int; // Previous layer position
 	@:optional public var canvas: TNodeCanvas; // Node history
 	@:optional public var canvas_type: Int;
+	@:optional public var canvas_group: Int;
 }

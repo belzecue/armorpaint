@@ -100,6 +100,21 @@ class Uniforms {
 			case "_decalLayerDim": {
 				return Context.layer.decalMat.getScale().z * 0.5;
 			}
+			case "_pickerOpacity": {
+				return Context.swatch.opacity;
+			}
+			case "_pickerOcclusion": {
+				return Context.swatch.occlusion;
+			}
+			case "_pickerRoughness": {
+				return Context.swatch.roughness;
+			}
+			case "_pickerMetallic": {
+				return Context.swatch.metallic;
+			}
+			case "_pickerHeight": {
+				return Context.swatch.height;
+			}
 		}
 		if (MaterialParser.script_links != null) {
 			for (key in MaterialParser.script_links.keys()) {
@@ -110,7 +125,7 @@ class Uniforms {
 						result = js.Lib.eval(script);
 					}
 					catch(e: Dynamic) {
-						Log.trace(e);
+						Console.log(e);
 					}
 				}
 				return result;
@@ -164,7 +179,10 @@ class Uniforms {
 				var y = Context.paintVec.y;
 				var lastx = Context.prevPaintVecX;
 				var lasty = Context.prevPaintVecY;
-				if (Context.paint2d) { x = vec2d(x); lastx = vec2d(lastx); }
+				if (Context.paint2d) {
+					x = vec2d(x);
+					lastx = vec2d(lastx);
+				}
 				var angle = Math.atan2(-y + lasty, x - lastx) - Math.PI / 2;
 				v.set(Math.cos(angle), Math.sin(angle), allowPaint ? 1 : 0);
 				Context.prevPaintVecX = Context.lastPaintVecX;
@@ -179,6 +197,16 @@ class Uniforms {
 			case "_decalLayerNor": {
 				v = iron.object.Uniforms.helpVec;
 				v.set(Context.layer.decalMat._20, Context.layer.decalMat._21, Context.layer.decalMat._22).normalize();
+				return v;
+			}
+			case "_pickerBase": {
+				v = iron.object.Uniforms.helpVec;
+				v.set(Context.swatch.base.R, Context.swatch.base.G, Context.swatch.base.B);
+				return v;
+			}
+			case "_pickerNormal": {
+				v = iron.object.Uniforms.helpVec;
+				v.set(Context.swatch.normal.R, Context.swatch.normal.G, Context.swatch.normal.B);
 				return v;
 			}
 		}
@@ -341,13 +369,15 @@ class Uniforms {
 		}
 		if (link.startsWith("_texblur_")) {
 			var id = link.substr(9);
-			return Context.nodePreviewsBlur != null ? Context.nodePreviewsBlur.get(id) : RenderPath.active.renderTargets.get("empty_black").image;
+			return Context.nodePreviews != null ? Context.nodePreviews.get(id) : RenderPath.active.renderTargets.get("empty_black").image;
 		}
-
-		// Warp uniforms
 		if (link.startsWith("_texwarp_")) {
 			var id = link.substr(9);
-			return Context.nodePreviewsWarp != null ? Context.nodePreviewsWarp.get(id) : RenderPath.active.renderTargets.get("empty_black").image;
+			return Context.nodePreviews != null ? Context.nodePreviews.get(id) : RenderPath.active.renderTargets.get("empty_black").image;
+		}
+		if (link.startsWith("_texbake_")) {
+			var id = link.substr(9);
+			return Context.nodePreviews != null ? Context.nodePreviews.get(id) : RenderPath.active.renderTargets.get("empty_black").image;
 		}
 
 		return null;

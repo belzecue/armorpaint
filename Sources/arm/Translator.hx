@@ -38,7 +38,7 @@ class Translator {
 		return translation;
 	}
 
-	// (Re)loads translations for the specified locale.
+	// (Re)loads translations for the specified locale
 	public static function loadTranslations(newLocale: String) {
 		if (newLocale == "system") {
 			Config.raw.locale = Krom.language();
@@ -50,8 +50,8 @@ class Translator {
 			Config.raw.locale = "en";
 		}
 
-		// No translations to load, as source strings are in English.
-		// Clear existing translations if switching languages at runtime.
+		// No translations to load, as source strings are in English
+		// Clear existing translations if switching languages at runtime
 		translations.clear();
 
 		if (Config.raw.locale == "en" && lastLocale == "en") {
@@ -70,12 +70,7 @@ class Translator {
 		}
 
 		// Generate extended font atlas
-		// Basic Latin + Latin-1 Supplement + Latin Extended-A
-		kha.graphics2.Graphics.fontGlyphs = [for (i in 32...383) i];
-		// + Greek
-		for (i in 880...1023) kha.graphics2.Graphics.fontGlyphs.push(i);
-		// + Cyrillic
-		for (i in 1024...1119) kha.graphics2.Graphics.fontGlyphs.push(i);
+		extendedGlyphs();
 
 		// Push additional char codes contained in translation file
 		var cjk = false;
@@ -102,12 +97,7 @@ class Translator {
 			if (!File.exists(cjkFontPath)) {
 				// Fall back to English
 				Config.raw.locale = "en";
-				// Basic Latin + Latin-1 Supplement + Latin Extended-A
-				kha.graphics2.Graphics.fontGlyphs = [for (i in 32...383) i];
-				// + Greek
-				for (i in 880...1023) kha.graphics2.Graphics.fontGlyphs.push(i);
-				// + Cyrillic
-				for (i in 1024...1119) kha.graphics2.Graphics.fontGlyphs.push(i);
+				extendedGlyphs();
 				translations.clear();
 				newFont = { path : "font.ttf", scale : 1.0 };
 			}
@@ -122,28 +112,34 @@ class Translator {
 					f.setFontIndex(fontIndex);
 				}
 				App.font = f;
+				// Scale up the font size and elements width a bit
+				App.theme.FONT_SIZE = Std.int(App.defaultFontSize * newFont.scale);
+				App.theme.ELEMENT_W = Std.int(App.defaultElementW * (Config.raw.locale != "en" ? 1.4 : 1.0));
 				var uis = [App.uiBox, App.uiMenu, arm.ui.UISidebar.inst.ui, arm.ui.UINodes.inst.ui, arm.ui.UIView2D.inst.ui];
-				var originFontSize = uis[0].t.FONT_SIZE;
-				// Scale up the font size a bit
-				uis[0].t.FONT_SIZE = Std.int(uis[0].t.FONT_SIZE * newFont.scale);
 				for (ui in uis) {
 					ui.ops.font = f;
 					ui.setScale(ui.ops.scaleFactor);
 				}
-				// Restore font size in theme
-				uis[0].t.FONT_SIZE = originFontSize;
 			});
 		});
 	}
 
-	// Returns a list of supported locales (plus English and the automatically detected system locale).
+	static function extendedGlyphs() {
+		// Basic Latin + Latin-1 Supplement + Latin Extended-A
+		kha.graphics2.Graphics.fontGlyphs = [for (i in 32...383) i];
+		// + Greek
+		for (i in 880...1023) kha.graphics2.Graphics.fontGlyphs.push(i);
+		// + Cyrillic
+		for (i in 1024...1119) kha.graphics2.Graphics.fontGlyphs.push(i);
+	}
+
+	// Returns a list of supported locales (plus English and the automatically detected system locale)
 	public static function getSupportedLocales(): Array<String> {
 		var locales = ["system", "en"];
 		for (localeFilename in File.readDirectory(Path.data() + Path.sep + "locale")) {
 			// Trim the `.json` file extension from file names
 			locales.push(localeFilename.substr(0, -5));
 		}
-
 		return locales;
 	}
 }

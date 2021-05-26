@@ -32,7 +32,10 @@ class Plugin {
 				iron.data.Data.deleteBlob("plugins/" + plugin);
 			});
 		}
-		catch (e: Dynamic) { trace("Failed to load plugin '" + plugin + "'"); trace(e); }
+		catch (e: Dynamic) {
+			trace("Failed to load plugin '" + plugin + "'");
+			trace(e);
+		}
 	}
 
 	public static function stop(plugin: String) {
@@ -48,7 +51,7 @@ class CoreBridge {
 	public static var ReflectFields = Reflect.fields;
 	public static var ReflectField = Reflect.field;
 	public static var ReflectSetField = Reflect.setField;
-	public static var StdIs = Std.is;
+	public static var StdIs = Std.isOfType;
 	public static var Bytes = haxe.io.Bytes;
 	public static var BytesInput = haxe.io.BytesInput;
 	public static var BytesOutput = haxe.io.BytesOutput;
@@ -79,7 +82,6 @@ class ArmBridge {
 	public static var Context = arm.Context;
 	public static var History = arm.History;
 	public static var Layers = arm.Layers;
-	public static var Log = arm.Log;
 	public static var Operator = arm.Operator;
 	public static var Plugin = arm.Plugin;
 	public static var Project = arm.Project;
@@ -96,13 +98,12 @@ class ArmBridge {
 	public static var UIFiles = arm.ui.UIFiles;
 	public static var UIMenu = arm.ui.UIMenu;
 	public static var UIView2D = arm.ui.UIView2D;
+	public static var UIBox = arm.ui.UIBox;
 	public static var MeshUtil = arm.util.MeshUtil;
 	public static var MaterialUtil = arm.util.MaterialUtil;
 	public static var RenderUtil = arm.util.RenderUtil;
 	public static var UVUtil = arm.util.UVUtil;
 	public static var ViewportUtil = arm.util.ViewportUtil;
-	public static var PngWriter = arm.format.PngWriter;
-	public static var PngTools = arm.format.PngTools;
 }
 
 @:expose("zui")
@@ -110,6 +111,12 @@ class ZuiBridge {
 	public static var Handle = zui.Zui.Handle;
 	public static var Zui = zui.Zui;
 	public static var Ext = zui.Ext;
+}
+
+@:expose("console")
+class ConsoleBridge {
+	public static var log = arm.Console.log;
+	public static var error = arm.Console.error;
 }
 
 @:keep

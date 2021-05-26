@@ -20,6 +20,7 @@ class UIView2D {
 	public static var inst: UIView2D;
 	public static var pipe: PipelineState;
 	public static var channelLocation: ConstantLocation;
+	public static var textInputHover = false;
 	public var show = false;
 	public var type = View2DLayer;
 	public var wx: Int;
@@ -31,9 +32,10 @@ class UIView2D {
 	public var panX = 0.0;
 	public var panY = 0.0;
 	public var panScale = 1.0;
+	public var uvmapShow = false;
+	public var tiledShow = false;
 	var texType = TexBase;
-	var uvmapShow = false;
-	var tiledShow = false;
+	var layerMode = View2DSelected;
 
 	public function new() {
 		inst = this;
@@ -53,7 +55,7 @@ class UIView2D {
 		channelLocation = pipe.getConstantLocation("channel");
 
 		var scale = Config.raw.window_scale;
-		ui = new Zui({font: App.font, theme: App.theme, color_wheel: App.colorWheel, scaleFactor: scale});
+		ui = new Zui({theme: App.theme, font: App.font, color_wheel: App.colorWheel, scaleFactor: scale});
 		ui.scrollEnabled = false;
 	}
 
@@ -62,6 +64,11 @@ class UIView2D {
 		ww = Config.raw.layout[LayoutNodesW];
 		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
 		wy = UIHeader.inst.headerh * 2;
+		if (!UISidebar.inst.show) {
+			ww += Config.raw.layout[LayoutSidebarW] + UIToolbar.inst.toolbarw;
+			wx -= UIToolbar.inst.toolbarw;
+			wy = 0;
+		}
 
 		if (!show) return;
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
@@ -104,6 +111,14 @@ class UIView2D {
 				if (Config.raw.brush_live && RenderPathPaint.liveLayerDrawn > 0) {
 					layer = RenderPathPaint.liveLayer;
 				}
+
+				if (layerMode == View2DVisible) {
+					var current = @:privateAccess kha.graphics2.Graphics.current;
+					if (current != null) current.end();
+					layer = untyped Layers.flatten();
+					if (current != null) current.begin(false);
+				}
+
 				tex =
 					Context.layerIsMask   ? layer.texpaint_mask :
 					texType == TexBase    ? layer.texpaint :
@@ -117,6 +132,7 @@ class UIView2D {
 					texType == TexRoughness ? 2 :
 					texType == TexMetallic  ? 3 :
 					texType == TexOpacity   ? 4 :
+					texType == TexHeight    ? 4 :
 					texType == TexNormal    ? 5 :
 											  0;
 			}
@@ -125,7 +141,7 @@ class UIView2D {
 			}
 			else { // View2DFont
 				tex = Context.font.image;
-				tw = tex.width;
+				tw = tex != null ? tex.width : 0;
 			}
 
 			var th = tw;
@@ -187,6 +203,7 @@ class UIView2D {
 			if (type == View2DLayer) {
 				h.text = l.name;
 				l.name = ui.textInput(h, "", Right);
+				textInputHover = ui.isHovered;
 			}
 			else if (type == View2DAsset) {
 				var asset = Context.texture;
@@ -219,6 +236,13 @@ class UIView2D {
 			ui._w = ew;
 
 			if (type == View2DLayer) {
+				layerMode = ui.combo(Id.handle({position: layerMode}), [
+					tr("Visible"),
+					tr("Selected"),
+				], tr("Layers"));
+				ui._x += ew + 3;
+				ui._y = 2;
+
 				if (!Context.layerIsMask) {
 					texType = ui.combo(Id.handle({position: texType}), [
 						tr("Base Color"),
@@ -227,6 +251,7 @@ class UIView2D {
 						tr("Roughness"),
 						tr("Metallic"),
 						tr("Opacity"),
+						tr("Height"),
 					], tr("Texture"));
 					ui._x += ew + 3;
 					ui._y = 2;
@@ -266,26 +291,25 @@ class UIView2D {
 			return;
 		}
 
-		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
-
-		if (mouse.down("right") || mouse.down("middle") || (mouse.down("left") && kb.down("control") && !decal)) {
-			panX += mouse.movementX;
-			panY += mouse.movementY;
-		}
-		if (mouse.wheelDelta != 0) {
+		var control = UINodes.getCanvasControl(ui);
+		panX += control.panX;
+		panY += control.panY;
+		if (control.zoom != 0) {
 			var _panX = panX / panScale;
 			var _panY = panY / panScale;
-			panScale -= mouse.wheelDelta / 10;
+			panScale += control.zoom;
 			if (panScale < 0.1) panScale = 0.1;
 			if (panScale > 6.0) panScale = 6.0;
 			panX = _panX * panScale;
 			panY = _panY * panScale;
 		}
 
+		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		var decalMask = decal && Operator.shortcut(Config.keymap.decal_mask + "+" + Config.keymap.action_paint, ShortcutDown);
 		var setCloneSource = Context.tool == ToolClone && Operator.shortcut(Config.keymap.set_clone_source + "+" + Config.keymap.action_paint, ShortcutDown);
 
 		if (type == View2DLayer &&
+			!textInputHover &&
 			(Operator.shortcut(Config.keymap.action_paint, ShortcutDown) ||
 			 Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint, ShortcutDown) ||
 			 decalMask ||
@@ -300,5 +324,23 @@ class UIView2D {
 		else if (kb.started("right")) panX += 5;
 		if (kb.started("up")) panY -= 5;
 		else if (kb.started("down")) panY += 5;
+
+		// Limit panning to keep texture in viewport
+		var border = 32;
+		var tw = ww * 0.95 * panScale;
+		var tx = ww / 2 - tw / 2 + panX;
+		var hh = iron.App.h();
+		var ty = hh / 2 - tw / 2 + panY;
+
+		if      (tx + border >  ww) panX =  ww / 2 + tw / 2 - border;
+		else if (tx - border < -tw) panX = -tw / 2 - ww / 2 + border;
+		if      (ty + border >  hh) panY =  hh / 2 + tw / 2 - border;
+		else if (ty - border < -tw) panY = -tw / 2 - hh / 2 + border;
+
+		if (Operator.shortcut(Config.keymap.view_reset)) {
+			panX = 0.0;
+			panY = 0.0;
+			panScale = 1.0;
+		}
 	}
 }

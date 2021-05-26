@@ -9,6 +9,7 @@ import arm.ui.UINodes;
 import arm.ui.UIView2D;
 import arm.ui.UIStatus;
 import arm.render.Inc;
+import arm.sys.File;
 import arm.sys.Path;
 import arm.Enums;
 import arm.ConfigFormat;
@@ -19,6 +20,13 @@ class Config {
 	public static var raw: TConfig = null;
 	public static var keymap: TKeymap;
 	public static var configLoaded = false;
+	#if (krom_android || krom_ios)
+	public static inline var buttonAlign = zui.Zui.Align.Center;
+	public static inline var buttonSpacing = "";
+	#else
+	public static inline var buttonAlign = zui.Zui.Align.Left;
+	public static inline var buttonSpacing = "      ";
+	#end
 
 	public static function load(done: Void->Void) {
 		try {
@@ -28,7 +36,22 @@ class Config {
 				done();
 			});
 		}
-		catch (e: Dynamic) { done(); }
+		catch (e: Dynamic) {
+			#if krom_linux
+			try { // Protected directory
+				Data.getBlob(Krom.savePath() + "config.arm", function(blob: kha.Blob) {
+					configLoaded = true;
+					raw = Json.parse(blob.toString());
+					done();
+				});
+			}
+			catch (e: Dynamic) {
+				done();
+			}
+			#else
+			done();
+			#end
+		}
 	}
 
 	public static function save() {
@@ -37,6 +60,10 @@ class Config {
 		var path = (Path.isProtected() ? Krom.savePath() : Path.data() + Path.sep) + "config.arm";
 		var bytes = Bytes.ofString(Json.stringify(raw));
 		Krom.fileSaveBytes(path, bytes.getData());
+
+		#if krom_linux // Protected directory
+		if (!File.exists(path)) Krom.fileSaveBytes(Krom.savePath() + "config.arm", bytes.getData());
+		#end
 	}
 
 	public static function init() {
@@ -99,6 +126,8 @@ class Config {
 			raw.material_live = true;
 			#end
 			raw.brush_3d = true;
+			raw.brush_depth_reject = true;
+			raw.brush_angle_reject = true;
 			raw.brush_live = false;
 			raw.camera_speed = 1.0;
 			raw.zoom_direction = ZoomVertical;
@@ -106,8 +135,10 @@ class Config {
 			raw.show_asset_names = false;
 			raw.node_preview = true;
 			raw.workspace = 0;
+			raw.layer_res = Res2048;
 			raw.dilate = DilateInstant;
 			raw.dilate_radius = 2;
+			raw.server = "https://armorpaint.fra1.digitaloceanspaces.com";
 		}
 		else {
 			// Upgrade config format created by older ArmorPaint build
@@ -122,6 +153,7 @@ class Config {
 			}
 		}
 
+		App.resHandle.position = raw.layer_res;
 		loadKeymap();
 	}
 
@@ -134,7 +166,21 @@ class Config {
 		initLayout();
 		Translator.loadTranslations(raw.locale);
 		applyConfig();
-		arm.ui.BoxPreferences.loadTheme(raw.theme);
+		loadTheme(raw.theme);
+	}
+
+	public static function importFrom(from: TConfig) {
+		var _sha = raw.sha;
+		var _version = raw.version;
+		raw = from;
+		raw.sha = _sha;
+		raw.version = _version;
+		zui.Zui.Handle.global = new zui.Zui.Handle(); // Reset ui handles
+		loadKeymap();
+		initLayout();
+		Translator.loadTranslations(raw.locale);
+		applyConfig();
+		loadTheme(raw.theme);
 	}
 
 	public static inline function getSuperSampleQuality(f: Float): Int {
@@ -235,5 +281,38 @@ class Config {
 			Std.int(iron.App.h() / 2),
 			Std.int(UIStatus.defaultStatusH * raw.window_scale)
 		];
+	}
+
+	public static function loadTheme(theme: String, tagRedraw = true) {
+		if (theme == "default.json") { // Built-in default
+			App.theme = zui.Themes.dark;
+		}
+		else {
+			Data.getBlob("themes/" + theme, function(b: kha.Blob) {
+				App.theme = Json.parse(b.toString());
+			});
+		}
+		App.theme.FILL_WINDOW_BG = true;
+		if (tagRedraw) {
+			App.uiBox.t = App.theme;
+			App.uiMenu.t = App.theme;
+			UISidebar.inst.ui.t = App.theme;
+			UINodes.inst.ui.t = App.theme;
+			UIView2D.inst.ui.t = App.theme;
+			UISidebar.inst.tagUIRedraw();
+		}
+		#if (krom_android || krom_ios)
+		App.theme.FULL_TABS = true;
+		#end
+	}
+
+	public static function enablePlugin(f: String) {
+		raw.plugins.push(f);
+		Plugin.start(f);
+	}
+
+	public static function disablePlugin(f: String) {
+		raw.plugins.remove(f);
+		Plugin.stop(f);
 	}
 }

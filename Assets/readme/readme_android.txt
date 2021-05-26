@@ -1,7 +1,7 @@
 ! This is an experimental build for Android !
 
 Recommended:
-- Android: 7.0 or newer
+- Android: 10.0 or newer
 - GPU: Adreno 530 / Mali T880MP12 or faster
 - CPU: 64bit (arm64-v8a)
 
@@ -9,7 +9,6 @@ Installation:
 - Copy .apk file to Android device
 - Open the .apk with file browser to install it
 - Allow installing from unknown sources
-- Go to 'Settings - Apps - ArmorPaint - Permissions' and enable 'Storage'
 
 Controls:
 - Paint with one finger, rotate and scroll with two fingers

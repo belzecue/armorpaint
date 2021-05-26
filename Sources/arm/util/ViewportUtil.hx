@@ -33,7 +33,7 @@ class ViewportUtil {
 			if (o.type == "camera_object") {
 				cam.transform.local.setF32(o.transform.values);
 				cam.transform.decompose();
-				if (Context.fovHandle != null) Context.fovHandle.value = 0.92;
+				if (Context.fovHandle != null) Context.fovHandle.value = cam.data.raw.fov = 0.92;
 				Context.camHandle.position = 0;
 				cam.data.raw.ortho = null;
 				cam.buildProjection();
@@ -45,8 +45,8 @@ class ViewportUtil {
 	}
 
 	public static function setView(x: Float, y: Float, z: Float, rx: Float, ry: Float, rz: Float) {
-		Context.object.transform.rot.set(0, 0, 0, 1);
-		Context.object.transform.dirty = true;
+		Context.paintObject.transform.rot.set(0, 0, 0, 1);
+		Context.paintObject.transform.dirty = true;
 		var cam = Scene.active.camera;
 		var dist = cam.transform.loc.length();
 		cam.transform.loc.set(x * dist, y * dist, z * dist);
