@@ -64,14 +64,12 @@ class ExportArm {
 				texpaint: l.texpaint != null ? Lz4.encode(l.texpaint.getPixels()) : null,
 				texpaint_nor: l.texpaint_nor != null ? Lz4.encode(l.texpaint_nor.getPixels()) : null,
 				texpaint_pack: l.texpaint_pack != null ? Lz4.encode(l.texpaint_pack.getPixels()) : null,
-				texpaint_mask: l.texpaint_mask != null ? Lz4.encode(l.texpaint_mask.getPixels()) : null,
 				uv_scale: l.scale,
 				uv_rot: l.angle,
 				uv_type: l.uvType,
 				decal_mat: l.uvType == UVProject ? l.decalMat.toFloat32Array() : null,
 				opacity_mask: l.maskOpacity,
 				fill_layer: l.fill_layer != null ? Project.materials.indexOf(l.fill_layer) : -1,
-				fill_mask: l.fill_mask != null ? Project.materials.indexOf(l.fill_mask) : -1,
 				object_mask: l.objectMask,
 				blending: l.blending,
 				parent: l.parent != null ? Project.layers.indexOf(l.parent) : -1,
@@ -110,7 +108,7 @@ class ExportArm {
 			envmap: Project.raw.envmap != null ? (sameDrive ? Path.toRelative(Project.filepath, Project.raw.envmap) : Project.raw.envmap) : null,
 			envmap_strength: iron.Scene.active.world.probe.raw.strength,
 			camera_world: iron.Scene.active.camera.transform.local.toFloat32Array(),
-			camera_origin: vec3f32(arm.plugin.Camera.inst.origins[0]),
+			camera_origin: vec3f32(arm.Camera.inst.origins[0]),
 			camera_fov: iron.Scene.active.camera.data.raw.fov,
 			#if (kha_metal || kha_vulkan)
 			is_bgra: true
@@ -118,6 +116,29 @@ class ExportArm {
 			is_bgra: false
 			#end
 		};
+
+		#if (krom_android || krom_ios)
+		var tex = iron.RenderPath.active.renderTargets.get("tex").image;
+		var mesh_icon = kha.Image.createRenderTarget(256, 256);
+		var r = App.w() / App.h();
+		mesh_icon.g2.begin(false);
+		mesh_icon.g2.drawScaledImage(tex, -(256 * r - 256) / 2, 0, 256 * r, 256);
+		mesh_icon.g2.end();
+		var mesh_icon_pixels = mesh_icon.getPixels();
+		for (i in 0...256 * 256 * 4) {
+			mesh_icon_pixels.set(i, Std.int(Math.pow(mesh_icon_pixels.get(i) / 255, 1.0 / 2.2) * 255));
+		}
+		App.notifyOnNextFrame(function() {
+			mesh_icon.unload();
+		});
+		// Project.raw.mesh_icons =
+		// 	#if (kha_metal || kha_vulkan)
+		// 	[Lz4.encode(bgraSwap(mesh_icon_pixels)];
+		// 	#else
+		// 	[Lz4.encode(mesh_icon_pixels)];
+		// 	#end
+		Krom.writePng(Project.filepath.substr(0, Project.filepath.length - 4) + "_icon.png", mesh_icon_pixels.getData(), 256, 256, 0);
+		#end
 
 		var bytes = ArmPack.encode(Project.raw);
 		Krom.fileSaveBytes(Project.filepath, bytes.getData(), bytes.length + 1);

@@ -20,14 +20,14 @@ class TabConsole {
 		if (ui.tab(UIStatus.inst.statustab, title, false, color) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
-			ui.row([1 / 20, 1 / 20]);
+			ui.row([1 / 14, 1 / 14]);
 
 			if (ui.button(tr("Clear"))) {
 				Console.lastTraces = [];
 			}
 			if (ui.button(tr("Export"))) {
 				var str = Console.lastTraces.join("\n");
-				UIFiles.show("txt", true, function(path: String) {
+				UIFiles.show("txt", true, false, function(path: String) {
 					var f = UIFiles.filename;
 					if (f == "") f = tr("untitled");
 					path = path + Path.sep + f;

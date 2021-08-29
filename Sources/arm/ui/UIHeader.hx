@@ -53,9 +53,6 @@ class UIHeader {
 				var occlusionPicked = Math.round(Context.swatch.occlusion * 100) / 100;
 				var roughnessPicked = Math.round(Context.swatch.roughness * 100) / 100;
 				var metallicPicked = Math.round(Context.swatch.metallic * 100) / 100;
-				#if kha_metal
-				ui.text('TODO'); // Skips first draw
-				#end
 
 				var h = Id.handle();
 				h.color.R = baseRPicked;
@@ -273,7 +270,7 @@ class UIHeader {
 				}
 
 				if (Context.tool == ToolFill) {
-					ui.combo(Context.fillTypeHandle, [tr("Object"), tr("Face"), tr("Angle")], tr("Fill Mode"));
+					ui.combo(Context.fillTypeHandle, [tr("Object"), tr("Face"), tr("Angle"), tr("UV Island")], tr("Fill Mode"));
 					if (Context.fillTypeHandle.changed) {
 						if (Context.fillTypeHandle.position == FillFace) {
 							ui.g.end();
@@ -300,8 +297,12 @@ class UIHeader {
 					var symXHandle = Id.handle({selected: false});
 					var symYHandle = Id.handle({selected: false});
 					var symZHandle = Id.handle({selected: false});
+					#if krom_ios
+					ui._x -= 10 * sc;
+					#else
 					ui._w = Std.int(56 * sc);
 					ui.text(tr("Symmetry"));
+					#end
 					ui._w = Std.int(25 * sc);
 					Context.symX = ui.check(symXHandle, tr("X"));
 					Context.symY = ui.check(symYHandle, tr("Y"));
@@ -309,8 +310,16 @@ class UIHeader {
 					if (symXHandle.changed || symYHandle.changed || symZHandle.changed) {
 						MakeMaterial.parsePaintMaterial();
 					}
-
 					ui._w = _w;
+				}
+
+				if (Context.tool == ToolBlur) {
+					ui._x += 10 * ui.SCALE();
+					var dirHandle = Id.handle({selected: false});
+					Context.blurDirectional = ui.check(dirHandle, tr("Directional"));
+					if (dirHandle.changed) {
+						MakeMaterial.parsePaintMaterial();
+					}
 				}
 			}
 		}

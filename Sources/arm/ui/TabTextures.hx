@@ -16,13 +16,13 @@ class TabTextures {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UISidebar.inst.htab2, tr("Textures"))) {
+		if (ui.tab(UIStatus.inst.statustab, tr("Textures"))) {
 
 			ui.beginSticky();
-			ui.row([1 / 4, 1 / 4]);
+			ui.row([1 / 14, 1 / 14]);
 
 			if (ui.button(tr("Import"))) {
-				UIFiles.show(Path.textureFormats.join(","), false, function(path: String) {
+				UIFiles.show(Path.textureFormats.join(","), false, true, function(path: String) {
 					ImportAsset.run(path, -1.0, -1.0, true, false);
 				});
 			}
@@ -34,8 +34,9 @@ class TabTextures {
 
 			if (Project.assets.length > 0) {
 
-				var slotw = Std.int(51 * ui.SCALE());
-				var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
+				var statusw = kha.System.windowWidth() - UIToolbar.inst.toolbarw - Config.raw.layout[LayoutSidebarW];
+				var slotw = Std.int(52 * ui.SCALE());
+				var num = Std.int(statusw / slotw);
 
 				for (row in 0...Std.int(Math.ceil(Project.assets.length / num))) {
 					var mult = Config.raw.show_asset_names ? 2 : 1;
@@ -71,7 +72,6 @@ class TabTextures {
 							UIView2D.inst.hwnd.redraws = 2;
 						}
 
-
 						if (asset == Context.texture) {
 							var _uix = ui._x;
 							var _uiy = ui._y;
@@ -87,14 +87,18 @@ class TabTextures {
 							ui._y = _uiy;
 						}
 
-						if (ui.isHovered) ui.tooltipImage(img, 256);
+						if (ui.isHovered) {
+							ui.tooltipImage(img, 256);
+							ui.tooltip(asset.name);
+						}
 
 						if (ui.isHovered && ui.inputReleasedR) {
+							Context.texture = asset;
 							var isPacked = Project.raw.packed_assets != null && Project.packedAssetExists(Project.raw.packed_assets, asset.file);
 							UIMenu.draw(function(ui: Zui) {
 								ui.text(asset.name + (isPacked ? " " + tr("(packed)") : ""), Right, ui.t.HIGHLIGHT_COL);
 								if (ui.button(tr("Export"), Left)) {
-									UIFiles.show("png", true, function(path: String) {
+									UIFiles.show("png", true, false, function(path: String) {
 										App.notifyOnNextFrame(function () {
 											if (Layers.pipeMerge == null) Layers.makePipe();
 											var target = kha.Image.createRenderTarget(to_pow2(img.width), to_pow2(img.height));
@@ -120,7 +124,7 @@ class TabTextures {
 									Layers.createImageMask(asset);
 								}
 								if (ui.button(tr("Delete"), Left)) {
-									UISidebar.inst.hwnd2.redraws = 2;
+									UIStatus.inst.statusHandle.redraws = 2;
 									Data.deleteImage(asset.file);
 									Project.assetMap.remove(asset.id);
 									Project.assets.splice(i, 1);

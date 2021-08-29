@@ -10,9 +10,9 @@ import zui.Ext;
 import iron.Scene;
 import iron.RenderPath;
 import iron.system.Input;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.util.UVUtil;
-import arm.util.BuildMacros;
+import arm.sys.BuildMacros;
 import arm.sys.Path;
 import arm.sys.File;
 import arm.node.MakeMaterial;
@@ -31,13 +31,12 @@ class UIMenu {
 	public static var menuElements = 0;
 	public static var keepOpen = false;
 	public static var menuCommands: Zui->Void = null;
-	static var changeStarted = false;
 	static var showMenuFirst = true;
 	static var hideMenu = false;
 
 	public static function render(g: kha.graphics2.Graphics) {
 		var ui = App.uiMenu;
-		var menuW = menuCommands != null ? Std.int(App.defaultElementW * App.uiMenu.SCALE() * 2.0) : Std.int(ui.ELEMENT_W() * 2.0);
+		var menuW = menuCommands != null ? Std.int(App.defaultElementW * App.uiMenu.SCALE() * 2.3) : Std.int(ui.ELEMENT_W() * 2.3);
 		var _BUTTON_COL = ui.t.BUTTON_COL;
 		ui.t.BUTTON_COL = ui.t.SEPARATOR_COL;
 		var _ELEMENT_OFFSET = ui.t.ELEMENT_OFFSET;
@@ -48,6 +47,7 @@ class UIMenu {
 		ui.beginRegion(g, menuX, menuY, menuW);
 
 		if (menuCommands != null) {
+			ui.fill(-1, -1, ui._w / ui.SCALE() + 2, ui.t.ELEMENT_H * menuElements + 2, ui.t.ACCENT_SELECT_COL);
 			ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * menuElements, ui.t.SEPARATOR_COL);
 			menuCommands(ui);
 		}
@@ -61,7 +61,7 @@ class UIMenu {
 				menuSeparator(ui);
 				if (menuButton(ui, tr("Import Texture..."), Config.keymap.file_import_assets)) Project.importAsset(Path.textureFormats.join(","), false);
 				if (menuButton(ui, tr("Import Envmap..."))) {
-					UIFiles.show("hdr", false, function(path: String) {
+					UIFiles.show("hdr", false, false, function(path: String) {
 						if (!path.endsWith(".hdr")) {
 							Console.error("Error: .hdr file expected");
 							return;
@@ -256,52 +256,52 @@ class UIMenu {
 			}
 			else if (menuCategory == MenuCamera) {
 				if (menuButton(ui, tr("Reset"), Config.keymap.view_reset)) {
-					ViewportUtil.resetViewport();
-					ViewportUtil.scaleToBounds();
+					Viewport.reset();
+					Viewport.scaleToBounds();
 				}
 				menuSeparator(ui);
 				if (menuButton(ui, tr("Front"), Config.keymap.view_front)) {
-					ViewportUtil.setView(0, -1, 0, Math.PI / 2, 0, 0);
+					Viewport.setView(0, -1, 0, Math.PI / 2, 0, 0);
 				}
 				if (menuButton(ui, tr("Back"), Config.keymap.view_back)) {
-					ViewportUtil.setView(0, 1, 0, Math.PI / 2, 0, Math.PI);
+					Viewport.setView(0, 1, 0, Math.PI / 2, 0, Math.PI);
 				}
 				if (menuButton(ui, tr("Right"), Config.keymap.view_right)) {
-					ViewportUtil.setView(1, 0, 0, Math.PI / 2, 0, Math.PI / 2);
+					Viewport.setView(1, 0, 0, Math.PI / 2, 0, Math.PI / 2);
 				}
 				if (menuButton(ui, tr("Left"), Config.keymap.view_left)) {
-					ViewportUtil.setView(-1, 0, 0, Math.PI / 2, 0, -Math.PI / 2);
+					Viewport.setView(-1, 0, 0, Math.PI / 2, 0, -Math.PI / 2);
 				}
 				if (menuButton(ui, tr("Top"), Config.keymap.view_top)) {
-					ViewportUtil.setView(0, 0, 1, 0, 0, 0);
+					Viewport.setView(0, 0, 1, 0, 0, 0);
 				}
 				if (menuButton(ui, tr("Bottom"), Config.keymap.view_bottom)) {
-					ViewportUtil.setView(0, 0, -1, Math.PI, 0, Math.PI);
+					Viewport.setView(0, 0, -1, Math.PI, 0, Math.PI);
 				}
 				menuSeparator(ui);
 
 				ui.changed = false;
 
 				if (menuButton(ui, tr("Orbit Left"), Config.keymap.view_orbit_left)) {
-					ViewportUtil.orbit(-Math.PI / 12, 0);
+					Viewport.orbit(-Math.PI / 12, 0);
 				}
 				if (menuButton(ui, tr("Orbit Right"), Config.keymap.view_orbit_right)) {
-					ViewportUtil.orbit(Math.PI / 12, 0);
+					Viewport.orbit(Math.PI / 12, 0);
 				}
 				if (menuButton(ui, tr("Orbit Up"), Config.keymap.view_orbit_up)) {
-					ViewportUtil.orbit(0, -Math.PI / 12);
+					Viewport.orbit(0, -Math.PI / 12);
 				}
 				if (menuButton(ui, tr("Orbit Down"), Config.keymap.view_orbit_down)) {
-					ViewportUtil.orbit(0, Math.PI / 12);
+					Viewport.orbit(0, Math.PI / 12);
 				}
 				if (menuButton(ui, tr("Orbit Opposite"), Config.keymap.view_orbit_opposite)) {
-					ViewportUtil.orbitOpposite();
+					Viewport.orbitOpposite();
 				}
 				if (menuButton(ui, tr("Zoom In"), Config.keymap.view_zoom_in)) {
-					ViewportUtil.zoom(0.2);
+					Viewport.zoom(0.2);
 				}
 				if (menuButton(ui, tr("Zoom Out"), Config.keymap.view_zoom_out)) {
-					ViewportUtil.zoom(-0.2);
+					Viewport.zoom(-0.2);
 				}
 				// menuSeparator(ui);
 
@@ -311,7 +311,7 @@ class UIMenu {
 				menuAlign(ui);
 				cam.data.raw.fov = ui.slider(Context.fovHandle, tr("FoV"), 0.3, 2.0, true);
 				if (Context.fovHandle.changed) {
-					ViewportUtil.updateCameraType(Context.cameraType);
+					Viewport.updateCameraType(Context.cameraType);
 				}
 
 				menuFill(ui);
@@ -323,55 +323,55 @@ class UIMenu {
 				Context.cameraType = Ext.inlineRadio(ui, Context.camHandle, [tr("Perspective"), tr("Orthographic")], Left);
 				if (ui.isHovered) ui.tooltip(tr("Camera Type") + ' (${Config.keymap.view_camera_type})');
 				if (Context.camHandle.changed) {
-					ViewportUtil.updateCameraType(Context.cameraType);
+					Viewport.updateCameraType(Context.cameraType);
 				}
 
 				if (ui.changed) keepOpen = true;
-
 			}
 			else if (menuCategory == MenuHelp) {
 				if (menuButton(ui, tr("Manual"))) {
-					File.start("https://armorpaint.org/manual");
+					File.loadUrl("https://armorpaint.org/manual");
 				}
 				if (menuButton(ui, tr("What's New"))) {
-					File.start("https://armorpaint.org/notes");
+					File.loadUrl("https://armorpaint.org/notes");
 				}
 				if (menuButton(ui, tr("Issue Tracker"))) {
-					File.start("https://github.com/armory3d/armorpaint/issues");
+					File.loadUrl("https://github.com/armory3d/armorpaint/issues");
 				}
 				if (menuButton(ui, tr("Report Bug"))) {
 					var url = "https://github.com/armory3d/armorpaint/issues/new?labels=bug&template=bug_report.md&body=*ArmorPaint%20" + Main.version + "-" + Main.sha + ",%20" + System.systemId + "*%0A%0A**Issue description:**%0A%0A**Steps to reproduce:**%0A%0A";
-					File.start(url);
+					File.loadUrl(url);
 				}
 				if (menuButton(ui, tr("Request Feature"))) {
 					var url = "https://github.com/armory3d/armorpaint/issues/new?labels=feature%20request&template=feature_request.md&body=*ArmorPaint%20" + Main.version + "-" + Main.sha + ",%20" + System.systemId + "*%0A%0A**Feature description:**%0A%0A";
-					File.start(url);
+					File.loadUrl(url);
 				}
 				menuSeparator(ui);
 
 				#if !(krom_android || krom_ios)
 				if (menuButton(ui, tr("Check for Updates..."))) {
 					// Retrieve latest version number
-					var url = "'https://luboslenco.gitlab.io/armorpaint/index.html'";
-					var blob = File.downloadBytes(url);
-					if (blob != null)  {
-						// Compare versions
-						var update = Json.parse(blob.toString());
-						var updateVersion = Std.int(update.version);
-						if (updateVersion > 0) {
-							var date = BuildMacros.date().split(" ")[0].substr(2); // 2019 -> 19
-							var dateInt = Std.parseInt(date.replace("-", ""));
-							if (updateVersion > dateInt) {
-								UIBox.showMessage(tr("Update"), tr("Update is available!\nPlease visit armorpaint.org to download."));
-							}
-							else {
-								UIBox.showMessage(tr("Update"), tr("You are up to date!"));
+					var url = "https://luboslenco.gitlab.io/armorpaint/index.html";
+					File.downloadBytes(url, function(bytes: Bytes) {
+						if (bytes != null)  {
+							// Compare versions
+							var update = Json.parse(bytes.toString());
+							var updateVersion = Std.int(update.version);
+							if (updateVersion > 0) {
+								var date = BuildMacros.date().split(" ")[0].substr(2); // 2019 -> 19
+								var dateInt = Std.parseInt(date.replace("-", ""));
+								if (updateVersion > dateInt) {
+									UIBox.showMessage(tr("Update"), tr("Update is available!\nPlease visit armorpaint.org to download."));
+								}
+								else {
+									UIBox.showMessage(tr("Update"), tr("You are up to date!"));
+								}
 							}
 						}
-					}
-					else {
-						UIBox.showMessage(tr("Update"), tr("Unable to check for updates.\nPlease visit armorpaint.org."));
-					}
+						else {
+							UIBox.showMessage(tr("Update"), tr("Unable to check for updates.\nPlease visit armorpaint.org."));
+						}
+					});
 				}
 				#end
 
@@ -410,20 +410,15 @@ class UIMenu {
 			}
 		}
 
-		var first = showMenuFirst;
-		hideMenu = ui.comboSelectedHandle == null && !changeStarted && !keepOpen && !first && (ui.changed || ui.inputReleased || ui.inputReleasedR || ui.isEscapeDown);
+		hideMenu = ui.comboSelectedHandle == null && !keepOpen && !showMenuFirst && (ui.changed || ui.inputReleased || ui.inputReleasedR || ui.isEscapeDown);
 		showMenuFirst = false;
 		keepOpen = false;
-		if (ui.inputReleased) changeStarted = false;
 
 		ui.t.BUTTON_COL = _BUTTON_COL;
 		ui.t.ELEMENT_OFFSET = _ELEMENT_OFFSET;
 		ui.t.ELEMENT_H = _ELEMENT_H;
 		ui.endRegion();
-	}
 
-	public static function update() {
-		//var ui = App.uiMenu;
 		if (hideMenu) {
 			show = false;
 			App.redrawUI();
@@ -433,12 +428,13 @@ class UIMenu {
 	}
 
 	public static function draw(commands: Zui->Void = null, elements: Int, x = -1, y = -1) {
+		App.uiMenu.endInput();
 		show = true;
 		menuCommands = commands;
 		menuElements = elements;
 		menuX = x > -1 ? x : Std.int(Input.getMouse().x);
 		menuY = y > -1 ? y : Std.int(Input.getMouse().y);
-		var menuW = App.defaultElementW * App.uiMenu.SCALE() * 2.0;
+		var menuW = App.defaultElementW * App.uiMenu.SCALE() * 2.3;
 		if (menuX + menuW > System.windowWidth()) {
 			menuX = Std.int(System.windowWidth() - menuW);
 		}
@@ -450,26 +446,32 @@ class UIMenu {
 	}
 
 	static function menuFill(ui: Zui) {
+		ui.g.color = ui.t.ACCENT_SELECT_COL;
+		ui.g.fillRect(ui._x - 1, ui._y, ui._w + 2, ui.ELEMENT_H() + 1 + 1);
 		ui.g.color = ui.t.SEPARATOR_COL;
-		ui.g.fillRect(ui._x, ui._y, ui._w, ui.ELEMENT_H());
+		ui.g.fillRect(ui._x, ui._y, ui._w, ui.ELEMENT_H() + 1);
 		ui.g.color = 0xffffffff;
 	}
 
 	static function menuSeparator(ui: Zui) {
 		ui._y++;
+		#if arm_touchui
 		ui.fill(0, 0, ui._w / ui.SCALE(), 1, ui.t.ACCENT_SELECT_COL);
+		#else
+		ui.fill(22, 0, ui._w / ui.SCALE() - 22, 1, ui.t.ACCENT_SELECT_COL);
+		#end
 	}
 
 	static function menuButton(ui: Zui, text: String, label = ""): Bool {
 		menuFill(ui);
-		#if (krom_android || krom_ios)
+		#if arm_touchui
 		label = "";
 		#end
 		return ui.button(Config.buttonSpacing + text, Config.buttonAlign, label);
 	}
 
 	static function menuAlign(ui: Zui) {
-		#if !(krom_android || krom_ios)
+		#if !arm_touchui
 		ui.row([1 / 8, 7 / 8]);
 		ui.endElement();
 		#end

@@ -79,6 +79,7 @@ class TabBrushes {
 						// App.dragBrush = Context.brush;
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
+						Context.selectBrush(i);
 						var add = Project.brushes.length > 1 ? 1 : 0;
 						UIMenu.draw(function(ui: Zui) {
 							//var b = Project.brushes[i];
@@ -108,7 +109,10 @@ class TabBrushes {
 							}
 						}, 3 + add);
 					}
-					if (ui.isHovered && imgFull != null) ui.tooltipImage(imgFull);
+					if (ui.isHovered && imgFull != null) {
+						ui.tooltipImage(imgFull);
+						ui.tooltip(Project.brushes[i].canvas.name);
+					}
 
 					if (Config.raw.show_asset_names) {
 						ui._x = uix;

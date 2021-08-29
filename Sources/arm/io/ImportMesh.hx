@@ -8,7 +8,7 @@ import iron.math.Vec4;
 import iron.Scene;
 import arm.util.MeshUtil;
 import arm.util.UVUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.sys.Path;
 import arm.ui.UIHeader;
 import arm.ui.UISidebar;
@@ -71,7 +71,7 @@ class ImportMesh {
 		}
 		Project.meshAssets = [path];
 
-		ViewportUtil.scaleToBounds();
+		Viewport.scaleToBounds();
 
 		if (Context.paintObject.name == "") Context.paintObject.name = "Object";
 		arm.node.MakeMaterial.parsePaintMaterial();
@@ -134,7 +134,6 @@ class ImportMesh {
 			Context.ddirty = 4;
 			UISidebar.inst.hwnd0.redraws = 2;
 			UISidebar.inst.hwnd1.redraws = 2;
-			UISidebar.inst.hwnd2.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
 			UVUtil.dilatemapCached = false;
@@ -143,11 +142,10 @@ class ImportMesh {
 
 	public static function addMesh(mesh: Dynamic) {
 
-		if (mesh.texa == null) {
-			equirectUnwrap(mesh);
-		}
+		if (mesh.texa == null) equirectUnwrap(mesh);
 		var raw = rawMesh(mesh);
 		raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex", data: "short2norm" });
+		if (mesh.cola != null) raw.vertex_arrays.push({ values: mesh.cola, attrib: "col", data: "short4norm", padding: 1 });
 
 		new MeshData(raw, function(md: MeshData) {
 
