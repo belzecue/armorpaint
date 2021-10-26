@@ -12,6 +12,7 @@ import arm.ui.UISidebar;
 import arm.ui.UIFiles;
 import arm.ui.BoxExport;
 import arm.sys.Path;
+import arm.ProjectFormat;
 import arm.Enums;
 
 class ExportTexture {
@@ -88,7 +89,12 @@ class ExportTexture {
 		trace("Textures exported in " + (iron.system.Time.realTime() - timer));
 		#end
 
-		Console.info("Textures exported.");
+		#if krom_ios
+		Console.info(tr("Textures exported.") + " ('Files/On My iPad/" + Main.title + "')");
+		#else
+		Console.info(tr("Textures exported."));
+		#end
+		@:privateAccess UIFiles.lastPath = "";
 	}
 
 	static function runBakeMaterial(path: String) {
@@ -123,7 +129,11 @@ class ExportTexture {
 		var textureSizeX = Config.getTextureResX();
 		var textureSizeY = Config.getTextureResY();
 		var formatQuality = Context.formatQuality;
+		#if (krom_android || krom_ios)
+		var f = kha.Window.get(0).title;
+		#else
 		var f = UIFiles.filename;
+		#end
 		if (f == "") f = tr("untitled");
 		var formatType = Context.formatType;
 		var bits = App.bitsHandle.position == Bits8 ? 8 : 16;
@@ -338,6 +348,22 @@ class ExportTexture {
 		if (type == 2 && off == 1) format = 4; // GGG1
 		if (type == 2 && off == 2) format = 5; // BBB1
 		if (type == 2 && off == 3) format = 6; // AAA1
+
+		if (Context.layersDestination == DestinationPacked) {
+			var image = kha.Image.fromBytes(pixels, resX, resY);
+			iron.data.Data.cachedImages.set(file, image);
+			var ar = file.split(Path.sep);
+			var name = ar[ar.length - 1];
+			var asset: TAsset = {name: name, file: file, id: Project.assetId++};
+			Project.assets.push(asset);
+			if (Project.raw.assets == null) Project.raw.assets = [];
+			Project.raw.assets.push(asset.file);
+			Project.assetNames.push(asset.name);
+			Project.assetMap.set(asset.id, image);
+			@:privateAccess ExportArm.packAssets(Project.raw, [asset]);
+			return;
+		}
+
 		if (bits == 8 && Context.formatType == FormatPng) {
 			Krom.writePng(file, pixels.getData(), resX, resY, format);
 		}

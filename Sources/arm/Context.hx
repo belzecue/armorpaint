@@ -98,6 +98,7 @@ class Context {
 	public static var formatType = FormatPng;
 	public static var formatQuality = 100.0;
 	public static var layersExport = ExportVisible;
+	public static var layersDestination = DestinationDisk;
 	public static var splitBy = SplitObject;
 	public static var parseTransform = true;
 	public static var parseVCols = false;
@@ -123,6 +124,7 @@ class Context {
 	public static var viewportShader: NodeShader->String = null;
 	public static var hscaleWasChanged = false;
 	public static var exportMeshFormat = FormatObj;
+	public static var exportMeshIndex = 0;
 	public static var cacheDraws = false;
 	public static var packAssetsOnExport = true;
 	public static var writeIconOnExport = false;

@@ -92,10 +92,10 @@ class App {
 			dropPath = dropPath.rtrim();
 			dropPaths.push(dropPath);
 			#end
-			#if krom_ios
+			// #if krom_ios
 			// Import immediately while access to resource is unlocked
-			handleDropPaths();
-			#end
+			// handleDropPaths();
+			// #end
 		});
 
 		System.notifyOnApplicationState(
@@ -129,6 +129,9 @@ class App {
 				defaultFontSize = theme.FONT_SIZE;
 				Translator.loadTranslations(Config.raw.locale);
 				UIFiles.filename = tr("untitled");
+				#if (krom_android || krom_ios)
+				kha.Window.get(0).title = tr("untitled");
+				#end
 
 				// Precompiled font for fast startup
 				if (Config.raw.locale == "en") {
@@ -190,6 +193,12 @@ class App {
 				cam.buildProjection();
 
 				Args.run();
+
+				#if arm_touchui
+				if (Config.raw.recent_projects.length > 0) {
+					arm.ui.BoxProjects.show();
+				}
+				#end
 			});
 		});
 	}
@@ -344,6 +353,7 @@ class App {
 		UIMenubar.inst.workspaceHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
 		UIView2D.inst.hwnd.redraws = 2;
+		UIBox.hwnd.redraws = 2;
 		if (Context.ddirty < 0) Context.ddirty = 0; // Redraw viewport
 		if (Context.splitView) Context.ddirty = 1;
 	}

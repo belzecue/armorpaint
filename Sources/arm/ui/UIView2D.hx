@@ -272,7 +272,13 @@ class UIView2D {
 
 			tiledShow = ui.check(Id.handle({selected: tiledShow}), tr("Tiled"));
 
-			if (Context.tool == ToolPicker) {
+			if (type == View2DAsset && tex != null) { // Texture resolution
+				ui._x += ew + 3;
+				ui._y = 2;
+				ui.text(tex.width + "x" + tex.height);
+			}
+
+			if (Context.tool == ToolPicker && (type == View2DLayer || type == View2DAsset)) {
 				var cursorImg = Res.get("cursor.k");
 				var hsize = 16 * ui.SCALE();
 				var size = hsize * 2;

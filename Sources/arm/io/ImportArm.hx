@@ -90,7 +90,11 @@ class ImportArm {
 			Project.projectNew(importAsMesh);
 			Project.filepath = path;
 			UIFiles.filename = path.substring(path.lastIndexOf(Path.sep) + 1, path.lastIndexOf("."));
+			#if (krom_android || krom_ios)
+			Window.get(0).title = UIFiles.filename;
+			#else
 			Window.get(0).title = UIFiles.filename + " - " + Main.title;
+			#end
 
 			// Import as mesh instead
 			if (importAsMesh) {
@@ -99,9 +103,14 @@ class ImportArm {
 			}
 
 			// Save to recent
+			#if krom_ios
+			var recent_path = path.substr(path.lastIndexOf("/") + 1);
+			#else
+			var recent_path = path;
+			#end
 			var recent = Config.raw.recent_projects;
-			recent.remove(path);
-			recent.unshift(path);
+			recent.remove(recent_path);
+			recent.unshift(recent_path);
 			Config.save();
 
 			Project.raw = project;

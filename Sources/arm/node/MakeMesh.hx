@@ -240,7 +240,7 @@ class MakeMesh {
 					frag.write('texpaint_nor_sample = textureLodShared(texpaint_nor' + l.id + ', texCoord, 0.0);');
 
 					if (MakeMaterial.emisUsed) {
-						frag.write('matid = texpaint_nor_sample.a;');
+						frag.write('if (texpaint_opac > 0.0) matid = texpaint_nor_sample.a;');
 					}
 
 					if (l.paintNor) {
@@ -292,8 +292,12 @@ class MakeMesh {
 
 			if (lastPass && Context.drawTexels) {
 				frag.add_uniform('vec2 texpaintSize', '_texpaintSize');
-				frag.write('vec2 texel = texCoord * texpaintSize;');
-				frag.write('basecol *= max(float(mod(int(texel.x), 2.0) == mod(int(texel.y), 2.0)), 0.9);');
+				frag.write('vec2 texel0 = texCoord * texpaintSize * 0.01;');
+				frag.write('vec2 texel1 = texCoord * texpaintSize * 0.1;');
+				frag.write('vec2 texel2 = texCoord * texpaintSize;');
+				frag.write('basecol *= max(float(mod(int(texel0.x), 2.0) == mod(int(texel0.y), 2.0)), 0.9);');
+				frag.write('basecol *= max(float(mod(int(texel1.x), 2.0) == mod(int(texel1.y), 2.0)), 0.9);');
+				frag.write('basecol *= max(float(mod(int(texel2.x), 2.0) == mod(int(texel2.y), 2.0)), 0.9);');
 			}
 
 			if (lastPass && Context.drawWireframe) {

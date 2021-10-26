@@ -4,16 +4,22 @@ import zui.Zui;
 import zui.Id;
 import iron.object.MeshObject;
 import arm.util.MeshUtil;
+import arm.Enums;
 
 class TabMeshes {
 
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UIStatus.inst.statustab, tr("Meshes"))) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (ui.tab(UIStatus.inst.statustab, tr("Meshes")) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
+			#if arm_touchui
+			ui.row([1 / 8, 1 / 8, 1 / 8, 1 / 8, 1 / 8, 1 / 8, 1 / 8, 1 / 8]);
+			#else
 			ui.row([1 / 14, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 14, 1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("Import"))) {
 				UIMenu.draw(function(ui: Zui) {
@@ -75,6 +81,7 @@ class TabMeshes {
 					UIMenu.draw(function(ui: Zui) {
 						ui.text(o.name, Right, ui.t.HIGHLIGHT_COL);
 						if (ui.button(tr("Export"), Left)) {
+							Context.exportMeshIndex = i + 1;
 							BoxExport.showMesh();
 						}
 						if (Project.paintObjects.length > 1 && ui.button(tr("Delete"), Left)) {

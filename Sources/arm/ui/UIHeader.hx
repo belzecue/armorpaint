@@ -65,7 +65,7 @@ class UIHeader {
 						ui.changed = false;
 						zui.Ext.colorWheel(ui, h, false, null, false);
 						if (ui.changed) UIMenu.keepOpen = true;
-					}, 3);
+					}, 10);
 				}
 
 				ui.text(tr("Base") + ' ($baseRPicked,$baseGPicked,$baseBPicked)');
@@ -150,8 +150,8 @@ class UIHeader {
 				}
 				#if (kha_direct3d12 || kha_vulkan)
 				if (rtBake) {
-					ui.text(tr("Rays/pix:") + ' ${arm.render.RenderPathRaytrace.raysPix}');
-					ui.text(tr("Rays/sec:") + ' ${arm.render.RenderPathRaytrace.raysSec}');
+					ui.text(tr("Rays/pix:") + ' ${arm.render.RenderPathRaytraceBake.raysPix}');
+					ui.text(tr("Rays/sec:") + ' ${arm.render.RenderPathRaytraceBake.raysSec}');
 				}
 				#end
 				if (Context.bakeType == BakeCurvature) {

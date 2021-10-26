@@ -16,14 +16,20 @@ class TabTextures {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UIStatus.inst.statustab, tr("Textures"))) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (ui.tab(UIStatus.inst.statustab, tr("Textures")) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
+			#if arm_touchui
+			ui.row([1 / 4, 1 / 4]);
+			#else
 			ui.row([1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("Import"))) {
 				UIFiles.show(Path.textureFormats.join(","), false, true, function(path: String) {
 					ImportAsset.run(path, -1.0, -1.0, true, false);
+					UIStatus.inst.statusHandle.redraws = 2;
 				});
 			}
 			if (ui.isHovered) ui.tooltip(tr("Import texture file") + ' (${Config.keymap.file_import_assets})');
@@ -121,7 +127,9 @@ class TabTextures {
 									Project.reimportTexture(asset);
 								}
 								if (ui.button(tr("To Mask"), Left)) {
-									Layers.createImageMask(asset);
+									App.notifyOnNextFrame(function() {
+										Layers.createImageMask(asset);
+									});
 								}
 								if (ui.button(tr("Delete"), Left)) {
 									UIStatus.inst.statusHandle.redraws = 2;

@@ -105,16 +105,19 @@ class Project {
 			#if krom_ios
 			var documentDirectory = Krom.saveDialog("", "");
 			documentDirectory = documentDirectory.substr(0, documentDirectory.length - 8); // Strip /'untitled'
-			filepath = documentDirectory + "/project" + Config.raw.recent_projects.length + ".arm";
+			filepath = documentDirectory + "/" + kha.Window.get(0).title + ".arm";
 			#elseif krom_android
-			filepath = Krom.savePath() + "/project" + Config.raw.recent_projects.length + ".arm";
+			filepath = Krom.savePath() + "/" + kha.Window.get(0).title + ".arm";
 			#else
 			projectSaveAs();
 			return;
 			#end
 		}
+
+		#if (krom_windows || krom_linux || krom_darwin)
 		var filename = Project.filepath.substring(Project.filepath.lastIndexOf(Path.sep) + 1, Project.filepath.length - 4);
 		Window.get(0).title = filename + " - " + Main.title;
+		#end
 
 		function _init() {
 			ExportArm.runProject();
@@ -164,7 +167,9 @@ class Project {
 	}
 
 	public static function projectNew(resetLayers = true) {
+		#if (krom_windows || krom_linux || krom_darwin)
 		Window.get(0).title = Main.title;
+		#end
 		filepath = "";
 		if (Context.mergedObject != null) {
 			Context.mergedObject.remove();
@@ -445,11 +450,13 @@ class Project {
 			var i = Project.assets.indexOf(asset);
 			Data.deleteImage(asset.file);
 			Project.assetMap.remove(asset.id);
+			var oldAsset = Project.assets[i];
 			Project.assets.splice(i, 1);
 			Project.assetNames.splice(i, 1);
 			ImportTexture.run(asset.file);
 			Project.assets.insert(i, Project.assets.pop());
 			Project.assetNames.insert(i, Project.assetNames.pop());
+			if (Context.texture == oldAsset) Context.texture = Project.assets[i];
 			function _next() {
 				arm.node.MakeMaterial.parsePaintMaterial();
 				arm.util.RenderUtil.makeMaterialPreview();

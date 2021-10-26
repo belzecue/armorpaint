@@ -4,8 +4,6 @@ import zui.Zui;
 import zui.Id;
 import iron.system.Time;
 import iron.system.Input;
-import arm.io.ImportFont;
-import arm.util.RenderUtil;
 import arm.Enums;
 
 class TabSwatches {
@@ -15,10 +13,15 @@ class TabSwatches {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UIStatus.inst.statustab, tr("Swatches"))) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (ui.tab(UIStatus.inst.statustab, tr("Swatches")) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
+			#if arm_touchui
+			ui.row([1 / 4, 1 / 4, 1 / 4, 1 / 4]);
+			#else
 			ui.row([1 / 14, 1 / 14, 1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("New"))) {
 				Context.setSwatch(Project.makeSwatch());
@@ -87,7 +90,6 @@ class TabSwatches {
 					}
 					else if (state == State.Released) {
 						if (Time.time() - Context.selectTime < 0.25) {
-
 							UIMenu.draw(function(ui) {
 								ui.changed = false;
 								var h = Id.handle();
@@ -103,14 +105,29 @@ class TabSwatches {
 					if (ui.isHovered && ui.inputReleasedR) {
 						Context.setSwatch(Project.raw.swatches[i]);
 						var add = Project.raw.swatches.length > 1 ? 1 : 0;
+						#if (krom_windows || krom_linux || krom_darwin)
+						add += 1; // Copy
+						#end
+
 						UIMenu.draw(function(ui: Zui) {
 							ui.text(tr("Swatch"), Right, ui.t.HIGHLIGHT_COL);
-							if (Project.raw.swatches.length > 1 && ui.button(tr("Delete"), Left)) {
+							if (ui.button(tr("Duplicate"), Left)) {
+								Context.setSwatch(Project.makeSwatch(Context.swatch.base));
+								Project.raw.swatches.push(Context.swatch);
+							}
+							#if (krom_windows || krom_linux || krom_darwin)
+							else if (ui.button(tr("Copy"), Left)) {
+								var val = untyped Context.swatch.base;
+								if (val < 0) val += untyped 4294967296;
+								Krom.copyToClipboard(untyped val.toString(16));
+							}
+							#end
+							else if (Project.raw.swatches.length > 1 && ui.button(tr("Delete"), Left)) {
 								Context.setSwatch(Project.raw.swatches[i == 0 ? 1 : 0]);
 								Project.raw.swatches.splice(i, 1);
 								UIStatus.inst.statusHandle.redraws = 2;
 							}
-						}, 1 + add);
+						}, 2 + add);
 					}
 					if (ui.isHovered) {
 						var val = untyped Project.raw.swatches[i].base;

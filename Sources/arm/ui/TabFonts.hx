@@ -11,10 +11,15 @@ class TabFonts {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UIStatus.inst.statustab, tr("Fonts"))) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (ui.tab(UIStatus.inst.statustab, tr("Fonts")) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
+			#if arm_touchui
+			ui.row([1 / 4, 1 / 4]);
+			#else
 			ui.row([1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("Import"))) Project.importAsset("ttf,ttc,otf");
 			if (ui.isHovered) ui.tooltip(tr("Import font file"));

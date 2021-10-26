@@ -4,6 +4,7 @@ import haxe.Json;
 import haxe.io.Bytes;
 import zui.Nodes;
 import iron.data.SceneFormat;
+import iron.object.MeshObject;
 import iron.system.ArmPack;
 import iron.system.Lz4;
 import arm.data.FontSlot;
@@ -15,9 +16,9 @@ import arm.Enums;
 
 class ExportArm {
 
-	public static function runMesh(path: String) {
+	public static function runMesh(path: String, paintObjects: Array<MeshObject>) {
 		var mesh_datas: Array<TMeshData> = [];
-		for (p in Project.paintObjects) mesh_datas.push(p.data.raw);
+		for (p in paintObjects) mesh_datas.push(p.data.raw);
 		var raw: TSceneFormat = { mesh_datas: mesh_datas };
 		var b = ArmPack.encode(raw);
 		if (!path.endsWith(".arm")) path += ".arm";
@@ -89,7 +90,11 @@ class ExportArm {
 		}
 
 		var packed_assets = Project.raw.packed_assets == null || Project.raw.packed_assets.length == 0 ? null : Project.raw.packed_assets;
+		#if krom_ios
+		var sameDrive = false;
+		#else
 		var sameDrive = Project.raw.envmap != null ? Project.filepath.charAt(0) == Project.raw.envmap.charAt(0) : true;
+		#end
 
 		Project.raw = {
 			version: Main.version,
@@ -118,16 +123,28 @@ class ExportArm {
 		};
 
 		#if (krom_android || krom_ios)
-		var tex = iron.RenderPath.active.renderTargets.get("tex").image;
+		var tex = iron.RenderPath.active.renderTargets.get(Context.renderMode == RenderForward ? "buf" : "tex").image;
 		var mesh_icon = kha.Image.createRenderTarget(256, 256);
 		var r = App.w() / App.h();
 		mesh_icon.g2.begin(false);
+		#if kha_opengl
+		mesh_icon.g2.drawScaledImage(tex, -(256 * r - 256) / 2, 256, 256 * r, -256);
+		#else
 		mesh_icon.g2.drawScaledImage(tex, -(256 * r - 256) / 2, 0, 256 * r, 256);
+		#end
 		mesh_icon.g2.end();
+		#if kha_metal
+		// Flush command list
+		mesh_icon.g2.begin(false);
+		mesh_icon.g2.end();
+		#end
 		var mesh_icon_pixels = mesh_icon.getPixels();
 		for (i in 0...256 * 256 * 4) {
 			mesh_icon_pixels.set(i, Std.int(Math.pow(mesh_icon_pixels.get(i) / 255, 1.0 / 2.2) * 255));
 		}
+		#if (kha_metal || kha_vulkan)
+		bgraSwap(mesh_icon_pixels);
+		#end
 		App.notifyOnNextFrame(function() {
 			mesh_icon.unload();
 		});
@@ -144,9 +161,14 @@ class ExportArm {
 		Krom.fileSaveBytes(Project.filepath, bytes.getData(), bytes.length + 1);
 
 		// Save to recent
+		#if krom_ios
+		var recent_path = Project.filepath.substr(Project.filepath.lastIndexOf("/") + 1);
+		#else
+		var recent_path = Project.filepath;
+		#end
 		var recent = Config.raw.recent_projects;
-		recent.remove(Project.filepath);
-		recent.unshift(Project.filepath);
+		recent.remove(recent_path);
+		recent.unshift(recent_path);
 		Config.save();
 
 		Console.info("Project saved.");
@@ -272,8 +294,12 @@ class ExportArm {
 	static function assetsToFiles(projectPath: String, assets: Array<TAsset>): Array<String> {
 		var texture_files: Array<String> = [];
 		for (a in assets) {
-			// Convert image path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == a.file.charAt(0);
+			#end
+			// Convert image path from absolute to relative
 			if (sameDrive) {
 				texture_files.push(Path.toRelative(projectPath, a.file));
 			}
@@ -287,8 +313,12 @@ class ExportArm {
 	static function meshesToFiles(projectPath: String): Array<String> {
 		var mesh_files: Array<String> = [];
 		for (file in Project.meshAssets) {
-			// Convert mesh path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == file.charAt(0);
+			#end
+			// Convert mesh path from absolute to relative
 			if (sameDrive) {
 				mesh_files.push(Path.toRelative(projectPath, file));
 			}
@@ -303,8 +333,12 @@ class ExportArm {
 		var font_files: Array<String> = [];
 		for (i in 1...fonts.length) {
 			var f = fonts[i];
-			// Convert font path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == f.file.charAt(0);
+			#end
+			// Convert font path from absolute to relative
 			if (sameDrive) {
 				font_files.push(Path.toRelative(projectPath, f.file));
 			}
@@ -319,8 +353,12 @@ class ExportArm {
 		var packed_assets: Array<TPackedAsset> = null;
 		if (Project.raw.packed_assets != null) {
 			for (pa in Project.raw.packed_assets) {
-				// Convert path from absolute to relative
+				#if krom_ios
+				var sameDrive = false;
+				#else
 				var sameDrive = projectPath.charAt(0) == pa.name.charAt(0);
+				#end
+				// Convert path from absolute to relative
 				pa.name = sameDrive ? Path.toRelative(projectPath, pa.name) : pa.name;
 				for (tf in texture_files) {
 					if (pa.name == tf) {
@@ -342,7 +380,7 @@ class ExportArm {
 		}
 		var tempImages: Array<kha.Image> = [];
 		for (i in 0...assets.length) {
-			if (!Project.packedAssetExists(raw.packed_assets, raw.assets[i])) {
+			if (!Project.packedAssetExists(raw.packed_assets, assets[i].file)) {
 				var image = Project.getImage(assets[i]);
 				var temp = kha.Image.createRenderTarget(image.width, image.height);
 				temp.g2.begin(false);
@@ -350,8 +388,8 @@ class ExportArm {
 				temp.g2.end();
 				tempImages.push(temp);
 				raw.packed_assets.push({
-					name: raw.assets[i],
-					bytes: Bytes.ofData(assets[i].name.endsWith(".jpg") ?
+					name: assets[i].file,
+					bytes: Bytes.ofData(assets[i].file.endsWith(".jpg") ?
 						Krom.encodeJpg(temp.getPixels().getData(), temp.width, temp.height, 0, 80) :
 						Krom.encodePng(temp.getPixels().getData(), temp.width, temp.height, 0)
 					)

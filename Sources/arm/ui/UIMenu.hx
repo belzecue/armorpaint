@@ -82,7 +82,10 @@ class UIMenu {
 					BoxExport.showTextures();
 				}
 				if (menuButton(ui, tr("Export Swatches..."))) Project.exportSwatches();
-				if (menuButton(ui, tr("Export Mesh..."))) BoxExport.showMesh();
+				if (menuButton(ui, tr("Export Mesh..."))) {
+					Context.exportMeshIndex = 0; // All
+					BoxExport.showMesh();
+				}
 				if (menuButton(ui, tr("Bake Material..."))) BoxExport.showBakeMaterial();
 
 				menuSeparator(ui);
@@ -394,12 +397,19 @@ class UIMenu {
 					var save = (Path.isProtected() ? Krom.savePath() : Path.data()) + Path.sep + "tmp.txt";
 					Krom.sysCommand('wmic path win32_VideoController get name > "' + save + '"');
 					var bytes = haxe.io.Bytes.ofData(Krom.loadBlob(save));
-					var gpu = "";
-					for (i in 30...Std.int(bytes.length / 2)) {
+					var gpuRaw = "";
+					for (i in 0...Std.int(bytes.length / 2)) {
 						var c = String.fromCharCode(bytes.get(i * 2));
-						if (c == "\n") continue;
-						gpu += c;
+						gpuRaw += c;
 					}
+
+					var gpus = gpuRaw.split("\n");
+					gpus = gpus.splice(1, gpus.length - 2);
+					var gpu = "";
+					for (g in gpus) {
+						gpu += g.rtrim() + ", ";
+					}
+					gpu = gpu.substr(0, gpu.length - 2);
 					msg += '\n$gpu';
 					#else
 					// { lshw -C display }
