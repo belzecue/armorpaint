@@ -24,3 +24,12 @@ jobs:
       run: |
         cd paint
         ../base/make --compile
+    - name: Upload binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: paint-linux-binary
+        path: |
+          paint/paint
+          paint/bin/**
+          paint/**/paint*
+        if-no-files-found: warn
