@@ -25,7 +25,7 @@ jobs:
         cd paint
         ../base/make --compile
     - name: Upload binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: paint-linux-binary
         path: |
