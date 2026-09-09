@@ -3,56 +3,54 @@ name: Windows (Direct3D12)
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
     branches:
-    - main
+      - main
   workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Compile
-      run: |
-        cd paint
-        ../base/make --compile
+      - uses: actions/checkout@v3
 
-    - name: Collect build outputs for artifact
-      id: collect
-      run: |
-        set -euo pipefail
-        cd "$GITHUB_WORKSPACE"
+      - name: Compile
+        run: |
+          cd paint
+          ../base/make --compile
 
-        # prepare artifact staging dir
-        rm -rf artifact
-        mkdir -p artifact
+      - name: Collect build outputs for artifact
+        id: collect
+        # run this step using Bash on the Windows runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
 
-        # adjust these find patterns to match your real outputs
-        # - executable files (-perm /111)
-        # - files named ArmorPaint or paint
-        # - common asset extensions (png, so)
-        find paint -type f \
-          \( -perm /111 -o -name 'ArmorPaint' -o -name 'paint' -o -iname 'paint*' -o -iname '*.png' -o -iname '*.so' -o -iname '*.dll' \) \
-          -not -path '*/.git/*' -print0 \
-          | xargs -0 -I{} bash -lc 'mkdir -p "artifact/$(dirname "{}")"; cp -v "{}" "artifact/{}"'
+          # prepare artifact staging dir
+          rm -rf artifact
+          mkdir -p artifact
 
-        # show what we staged
-        echo "Staged files:"
-        ls -laR artifact || true
+          # find likely outputs and copy them into artifact/ preserving paths
+          # include executables, .exe, .dll, common asset extensions
+          find paint -type f \
+            \( -perm /111 -o -iname '*.exe' -o -iname '*.dll' -o -name 'ArmorPaint' -o -name 'paint' -o -iname 'paint*' -o -iname '*.png' -o -iname '*.so' \) \
+            -not -path '*/.git/*' -print0 \
+            | xargs -0 -I{} bash -lc 'mkdir -p "artifact/$(dirname "{}")"; cp -v "{}" "artifact/{}"'
 
-        # fail early if nothing was staged
-        if [ -z "$(find artifact -type f -print -quit || true)" ]; then
-          echo "No files were staged into artifact/ — check the find patterns and build output paths" >&2
-          exit 1
-        fi
+          echo "Staged files:"
+          ls -laR artifact || true
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: paint-linux-binary
-        path: artifact
-        if-no-files-found: error
+          if [ -z "$(find artifact -type f -print -quit || true)" ]; then
+            echo "No files were staged into artifact/ — check the find patterns and build output paths" >&2
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paint-windows-binary
+          path: artifact
+          if-no-files-found: error
