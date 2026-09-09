@@ -24,46 +24,37 @@ jobs:
       run: |
         cd paint
         ../base/make --compile
-    - name: Locate binary
-      id: locate
+    - name: Collect build outputs for artifact
+      id: collect
       run: |
-        # search for executable files under paint (skip common non-binaries)
-        cd paint
-        find . -type f -perm /111 -not -path './.git/*' -print > found.txt || true
-        # also include likely non-executable build outputs (just in case)
-        find . -type f -name 'paint*' -print >> found.txt || true
-        # dedupe and remove empty lines
-        awk '!seen[$0]++' found.txt | sed '/^$/d' > found_dedup.txt || true
-        # show what we found for debugging
-        echo "Found files:"
-        sed -n '1,200p' found_dedup.txt || true
-        # prepare outputs: first file and all files (space separated)
-        if [ -s found_dedup.txt ]; then
-          first=$(head -n1 found_dedup.txt)
-          all=$(paste -sd' ' found_dedup.txt)
-          # output relative paths (without leading ./)
-          first_rel="${first#./}"
-          all_rel=$(echo "$all" | sed 's#\./##g')
-          echo "binary=${{ github.workspace }}/paint/${first_rel}" >> $GITHUB_OUTPUT
-          echo "files=${{ github.workspace }}/paint/${all_rel}" >> $GITHUB_OUTPUT
-        else
-          echo "No build outputs found" >&2
-          echo "binary=" >> $GITHUB_OUTPUT
-          echo "files=" >> $GITHUB_OUTPUT
+        set -euo pipefail
+        cd $GITHUB_WORKSPACE
+
+        # create artifact staging dir
+        rm -rf artifact
+        mkdir -p artifact
+
+        # search for likely outputs under paint and copy them into artifact preserving paths
+        # adjust the find patterns to match your actual binary names/locations
+        find paint -type f \
+          \( -perm /111 -o -name 'ArmorPaint' -o -name 'paint' -o -iname 'paint*' -o -iname '*.png' -o -iname '*.so' -o -iname '*.dll' \) \
+          -not -path '*/.git/*' -print0 \
+          | xargs -0 -I{} bash -c 'mkdir -p artifact/$(dirname "{}"); cp -v "{}" "artifact/{}"'
+
+        # show what we staged
+        echo "Staged files:"
+        ls -laR artifact || true
+
+        # fail early if nothing was staged
+        if [ -z "$(find artifact -type f -print -quit || true)" ]; then
+          echo "No files were staged into artifact/ — check the find patterns and build output paths" >&2
+          exit 1
         fi
 
-    - name: Upload binary
-      if: steps.locate.outputs.binary != ''
-      uses: actions/upload-artifact@v4
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
       with:
         name: paint-linux-binary
-        path: ${{ steps.locate.outputs.files }}
+        path: artifact
         if-no-files-found: error
 
-    - name: Upload debug listing
-      if: steps.locate.outputs.binary == ''
-      uses: actions/upload-artifact@v4
-      with:
-        name: paint-build-debug
-        path: paint/found_dedup.txt
-        if-no-files-found: warn
