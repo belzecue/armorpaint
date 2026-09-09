@@ -24,12 +24,46 @@ jobs:
       run: |
         cd paint
         ../base/make --compile
+    - name: Locate binary
+      id: locate
+      run: |
+        # search for executable files under paint (skip common non-binaries)
+        cd paint
+        find . -type f -perm /111 -not -path './.git/*' -print > found.txt || true
+        # also include likely non-executable build outputs (just in case)
+        find . -type f -name 'paint*' -print >> found.txt || true
+        # dedupe and remove empty lines
+        awk '!seen[$0]++' found.txt | sed '/^$/d' > found_dedup.txt || true
+        # show what we found for debugging
+        echo "Found files:"
+        sed -n '1,200p' found_dedup.txt || true
+        # prepare outputs: first file and all files (space separated)
+        if [ -s found_dedup.txt ]; then
+          first=$(head -n1 found_dedup.txt)
+          all=$(paste -sd' ' found_dedup.txt)
+          # output relative paths (without leading ./)
+          first_rel="${first#./}"
+          all_rel=$(echo "$all" | sed 's#\./##g')
+          echo "binary=${{ github.workspace }}/paint/${first_rel}" >> $GITHUB_OUTPUT
+          echo "files=${{ github.workspace }}/paint/${all_rel}" >> $GITHUB_OUTPUT
+        else
+          echo "No build outputs found" >&2
+          echo "binary=" >> $GITHUB_OUTPUT
+          echo "files=" >> $GITHUB_OUTPUT
+        fi
+
     - name: Upload binary
+      if: steps.locate.outputs.binary != ''
       uses: actions/upload-artifact@v4
       with:
         name: paint-linux-binary
-        path: |
-          paint/paint
-          paint/bin/**
-          paint/**/paint*
+        path: ${{ steps.locate.outputs.files }}
+        if-no-files-found: error
+
+    - name: Upload debug listing
+      if: steps.locate.outputs.binary == ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: paint-build-debug
+        path: paint/found_dedup.txt
         if-no-files-found: warn
