@@ -19,3 +19,39 @@ jobs:
       run: |
         cd paint
         ../base/make --compile
+
+    - name: Collect build outputs for artifact
+      id: collect
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+
+        # prepare artifact staging dir
+        rm -rf artifact
+        mkdir -p artifact
+
+        # adjust these find patterns to match your real outputs
+        # - executable files (-perm /111)
+        # - files named ArmorPaint or paint
+        # - common asset extensions (png, so)
+        find paint -type f \
+          \( -perm /111 -o -name 'ArmorPaint' -o -name 'paint' -o -iname 'paint*' -o -iname '*.png' -o -iname '*.so' -o -iname '*.dll' \) \
+          -not -path '*/.git/*' -print0 \
+          | xargs -0 -I{} bash -lc 'mkdir -p "artifact/$(dirname "{}")"; cp -v "{}" "artifact/{}"'
+
+        # show what we staged
+        echo "Staged files:"
+        ls -laR artifact || true
+
+        # fail early if nothing was staged
+        if [ -z "$(find artifact -type f -print -quit || true)" ]; then
+          echo "No files were staged into artifact/ — check the find patterns and build output paths" >&2
+          exit 1
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: paint-linux-binary
+        path: artifact
+        if-no-files-found: error
